@@ -1,0 +1,5 @@
+node_modules
+dist
+build
+coverage
+docs/design_handoff_interviewai

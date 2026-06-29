@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  ::selection{background:#dbeafe}
+  textarea,input,button{font-family:inherit}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  @keyframes barPulse{0%{transform:scaleY(.22)}50%{transform:scaleY(1)}100%{transform:scaleY(.22)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes blink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+  @keyframes micRing{0%{transform:scale(1);opacity:.55}100%{transform:scale(1.9);opacity:0}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#f7f8f9;color:#0f172a;display:flex;flex-direction:column">
+
+  <!-- ============ MARKETING / APP NAVBAR ============ -->
+  <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
+    <header style="background:#061f3d;color:#fff;position:sticky;top:0;z-index:40;border-bottom:1px solid rgba(255,255,255,.08)">
+      <div style="max-width:1200px;margin:0 auto;padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+        <div onClick="{{ goDashboard }}" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <div style="width:26px;height:26px;border-radius:7px;background:#2563eb;display:flex;align-items:center;justify-content:center">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg>
+          </div>
+          <span style="font-size:16px;font-weight:600;letter-spacing:-.01em">InterviewAI</span>
+        </div>
+        <nav style="display:flex;align-items:center;gap:28px">
+          <span onClick="{{ goDashboard }}" style="{{ navDashStyle }}">Dashboard</span>
+          <span onClick="{{ goHistory }}" style="{{ navHistStyle }}">Riwayat</span>
+          <span onClick="{{ goProfile }}" style="{{ navProfStyle }}">Profil</span>
+          <div style="width:34px;height:34px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#fff;cursor:pointer">{{ userInitial }}</div>
+        </nav>
+      </div>
+    </header>
+  </sc-if>
+
+  <!-- ============ 1. LANDING ============ -->
+  <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <header style="position:sticky;top:0;z-index:40;background:rgba(247,248,249,.85);backdrop-filter:blur(8px);border-bottom:1px solid #ececef">
+        <div style="max-width:1100px;margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:26px;height:26px;border-radius:7px;background:#061f3d;display:flex;align-items:center;justify-content:center">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg>
+            </div>
+            <span style="font-size:16px;font-weight:600;letter-spacing:-.01em;color:#0f172a">InterviewAI</span>
+          </div>
+          <button onClick="{{ goAuth }}" style="background:none;border:1px solid #d8dade;color:#0f172a;font-size:14px;font-weight:500;padding:8px 16px;border-radius:8px;cursor:pointer">Masuk</button>
+        </div>
+      </header>
+
+      <section style="max-width:760px;margin:0 auto;padding:100px 24px 64px;text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:7px;border:1px solid #dbe3f1;background:#eff6ff;color:#2563eb;font-size:13px;font-weight:500;padding:5px 12px;border-radius:999px;margin-bottom:28px">
+          <span style="width:6px;height:6px;border-radius:50%;background:#2563eb"></span>
+          Latihan wawancara berbasis suara
+        </div>
+        <h1 style="font-size:52px;line-height:1.08;font-weight:600;letter-spacing:-.03em;color:#0f172a;text-wrap:balance">Latih wawancara kerja Anda<br>dengan pewawancara AI</h1>
+        <p style="font-size:18px;line-height:1.6;color:#5b6471;max-width:540px;margin:24px auto 0;text-wrap:pretty">Berlatih menjawab pertanyaan secara langsung melalui percakapan suara, lalu dapatkan umpan balik terperinci untuk meningkatkan peluang Anda diterima.</p>
+        <div style="margin-top:36px;display:flex;justify-content:center">
+          <button onClick="{{ goAuth }}" style="background:#2563eb;color:#fff;border:none;font-size:16px;font-weight:500;padding:14px 28px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:9px">
+            Mulai Sekarang
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+          </button>
+        </div>
+      </section>
+
+      <section style="max-width:1000px;margin:0 auto;padding:24px 24px 110px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+          <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:26px">
+            <div style="width:40px;height:40px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#061f3d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg>
+            </div>
+            <h3 style="font-size:16px;font-weight:600;color:#0f172a;margin-bottom:7px">Percakapan suara nyata</h3>
+            <p style="font-size:14px;line-height:1.6;color:#5b6471">Berbicara langsung dengan AI seperti wawancara sungguhan, bukan sekadar mengetik jawaban.</p>
+          </div>
+          <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:26px">
+            <div style="width:40px;height:40px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#061f3d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"></path><path d="M7 16V10"></path><path d="M12 16V5"></path><path d="M17 16v-4"></path></svg>
+            </div>
+            <h3 style="font-size:16px;font-weight:600;color:#0f172a;margin-bottom:7px">Umpan balik terukur</h3>
+            <p style="font-size:14px;line-height:1.6;color:#5b6471">Dapatkan skor dan masukan per aspek: komunikasi, relevansi, dan struktur jawaban.</p>
+          </div>
+          <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:26px">
+            <div style="width:40px;height:40px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#061f3d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg>
+            </div>
+            <h3 style="font-size:16px;font-weight:600;color:#0f172a;margin-bottom:7px">Sesuai deskripsi kerja</h3>
+            <p style="font-size:14px;line-height:1.6;color:#5b6471">Tempel deskripsi lowongan agar AI menyesuaikan pertanyaan dengan posisi yang Anda incar.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer style="background:#061f3d;color:#8aa0bd;margin-top:auto">
+        <div style="max-width:1100px;margin:0 auto;padding:28px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:13px">
+          <span>© 2026 InterviewAI</span>
+          <span>Dibuat untuk pencari kerja Indonesia</span>
+        </div>
+      </footer>
+    </div>
+  </sc-if>
+
+  <!-- ============ 2. LOGIN / REGISTER ============ -->
+  <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;gap:24px">
+      <div onClick="{{ goLanding }}" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <div style="width:28px;height:28px;border-radius:8px;background:#061f3d;display:flex;align-items:center;justify-content:center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg>
+        </div>
+        <span style="font-size:17px;font-weight:600">InterviewAI</span>
+      </div>
+
+      <div style="width:100%;max-width:420px;background:#fff;border:1px solid #ececef;border-radius:12px;padding:32px;box-shadow:0 1px 3px rgba(16,24,40,.04)">
+        <h1 style="font-size:22px;font-weight:600;letter-spacing:-.01em;text-align:center">{{ authTitle }}</h1>
+        <p style="font-size:14px;color:#5b6471;text-align:center;margin-top:6px">{{ authSubtitle }}</p>
+
+        <div style="display:flex;background:#f1f3f5;border-radius:8px;padding:4px;margin:24px 0">
+          <button onClick="{{ setLogin }}" style="{{ tabLoginStyle }}">Masuk</button>
+          <button onClick="{{ setRegister }}" style="{{ tabRegisterStyle }}">Daftar</button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Nama lengkap</label>
+              <input value="{{ form.name }}" onInput="{{ onName }}" placeholder="Nama Anda" style="{{ nameInputStyle }}">
+            </div>
+          </sc-if>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Email</label>
+            <input value="{{ form.email }}" onInput="{{ onEmail }}" placeholder="nama@email.com" style="{{ emailInputStyle }}">
+            <sc-if value="{{ errEmail }}" hint-placeholder-val="{{ false }}"><p style="font-size:12.5px;color:#dc2626;margin-top:6px">{{ errEmail }}</p></sc-if>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Kata sandi</label>
+            <input type="password" value="{{ form.password }}" onInput="{{ onPassword }}" placeholder="Minimal 6 karakter" style="{{ passInputStyle }}">
+            <sc-if value="{{ errPassword }}" hint-placeholder-val="{{ false }}"><p style="font-size:12.5px;color:#dc2626;margin-top:6px">{{ errPassword }}</p></sc-if>
+          </div>
+
+          <button onClick="{{ submitAuth }}" disabled="{{ authLoading }}" style="{{ authSubmitStyle }}">
+            <sc-if value="{{ authLoading }}" hint-placeholder-val="{{ false }}"><span style="width:15px;height:15px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite"></span></sc-if>
+            {{ authSubmitLabel }}
+          </button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:#8a929e">{{ authSwitchPrompt }} <span onClick="{{ toggleAuth }}" style="color:#2563eb;font-weight:500;cursor:pointer">{{ authSwitchAction }}</span></p>
+    </div>
+  </sc-if>
+
+  <!-- ============ 3. DASHBOARD ============ -->
+  <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+    <div style="max-width:1000px;margin:0 auto;width:100%;padding:40px 24px 80px">
+      <h1 style="font-size:26px;font-weight:600;letter-spacing:-.02em">Selamat datang, {{ userName }}</h1>
+      <p style="font-size:15px;color:#5b6471;margin-top:6px">Pilih bidang pekerjaan, tambahkan konteks lowongan, lalu mulai sesi latihan.</p>
+
+      <h2 style="font-size:14px;font-weight:600;color:#0f172a;margin:34px 0 14px">1. Pilih bidang pekerjaan</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+        <sc-for list="{{ fields }}" as="f" hint-placeholder-count="6">
+          <div onClick="{{ f.onClick }}" style="{{ f.style }}">
+            <div style="{{ f.iconWrapStyle }}">{{ f.icon }}</div>
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:600;color:#0f172a">{{ f.title }}</div>
+              <div style="font-size:13px;color:#5b6471;margin-top:3px;line-height:1.5">{{ f.desc }}</div>
+            </div>
+            <sc-if value="{{ f.selected }}" hint-placeholder-val="{{ false }}">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="11" stroke="none"></circle><path d="M7 12.5l3.2 3.2L17 9" fill="none"></path></svg>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <h2 style="font-size:14px;font-weight:600;color:#0f172a;margin:36px 0 14px;display:flex;align-items:center;gap:10px">2. Konteks lowongan <span style="background:#f1f3f5;color:#6b7280;font-size:11.5px;font-weight:500;padding:3px 9px;border-radius:999px">Opsional</span></h2>
+      <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:24px">
+        <p style="font-size:13.5px;color:#5b6471;margin-bottom:18px;line-height:1.55">Tempel deskripsi dari iklan lowongan agar pewawancara AI menyesuaikan pertanyaannya dengan posisi yang Anda lamar.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:14px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Posisi yang dilamar</label>
+            <input value="{{ jobTitle }}" onInput="{{ onJobTitle }}" placeholder="mis. Backend Engineer" style="{{ plainInputStyle }}">
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Perusahaan</label>
+            <input value="{{ company }}" onInput="{{ onCompany }}" placeholder="mis. PT Maju Teknologi" style="{{ plainInputStyle }}">
+          </div>
+        </div>
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">Deskripsi pekerjaan</label>
+        <textarea value="{{ jobDesc }}" onInput="{{ onJobDesc }}" placeholder="Tempel tanggung jawab dan kualifikasi dari iklan lowongan di sini…" style="width:100%;min-height:120px;resize:vertical;border:1px solid #d8dade;border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.55;color:#0f172a;outline:none"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <span style="font-size:12px;color:#9aa1ad">{{ jobDescCount }} karakter</span>
+          <sc-if value="{{ jobDescReady }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#16a34a;display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>Konteks akan dipakai AI</span></sc-if>
+        </div>
+
+        <label style="display:block;font-size:13px;font-weight:500;margin:20px 0 6px">Unggah CV <span style="color:#9aa1ad;font-weight:400">(opsional)</span></label>
+        <div onClick="{{ pickCv }}" onDragover="{{ onDragOver }}" onDragleave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="{{ dropZoneStyle }}">
+          <input id="cvfile" type="file" onChange="{{ onCvFile }}" style="display:none">
+          <sc-if value="{{ cvName }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:10px;justify-content:center;color:#0f172a;font-size:14px;font-weight:500">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path></svg>
+              {{ cvName }} <span onClick="{{ clearCv }}" style="color:#9aa1ad;font-weight:400;text-decoration:underline">hapus</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ noCv }}" hint-placeholder-val="{{ true }}">
+            <div style="text-align:center;color:#8a929e">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9aa1ad" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 8px;display:block"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M5 20h14"></path></svg>
+              <span style="font-size:13.5px"><span style="color:#2563eb;font-weight:500">Klik untuk unggah</span> atau seret berkas ke sini</span>
+              <div style="font-size:12px;margin-top:4px;color:#aab0ba">PDF atau DOCX, maks 5MB</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <button onClick="{{ startSession }}" disabled="{{ startDisabled }}" style="{{ startBtnStyle }}">
+        {{ startBtnLabel }}
+      </button>
+      <sc-if value="{{ startDisabled }}" hint-placeholder-val="{{ true }}"><p style="text-align:center;font-size:12.5px;color:#9aa1ad;margin-top:10px">Pilih bidang pekerjaan terlebih dahulu untuk memulai.</p></sc-if>
+
+      <h2 style="font-size:14px;font-weight:600;color:#0f172a;margin:44px 0 14px">Sesi terakhir</h2>
+      <div style="background:#fff;border:1px solid #ececef;border-radius:12px;overflow:hidden">
+        <sc-for list="{{ recentSessions }}" as="s" hint-placeholder-count="3">
+          <div onClick="{{ s.onClick }}" style="{{ s.rowStyle }}">
+            <div style="width:38px;height:38px;border-radius:9px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#061f3d">{{ s.icon }}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:500;color:#0f172a">{{ s.field }}</div>
+              <div style="font-size:12.5px;color:#8a929e;margin-top:2px">{{ s.date }} · {{ s.duration }}</div>
+            </div>
+            <div style="{{ s.scoreBadgeStyle }}">{{ s.score }}</div>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c2c7cf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ 4. INTERVIEW SESSION ============ -->
+  <sc-if value="{{ isSession }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ sessionRootStyle }}">
+      <!-- session top bar -->
+      <div style="{{ sessionBarStyle }}">
+        <div style="display:flex;align-items:center;gap:14px;min-width:0">
+          <button onClick="{{ askEnd }}" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;color:{{ sessionFg }}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+          </button>
+          <div style="min-width:0">
+            <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sessionField }}</div>
+            <div style="font-size:12px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sessionContext }}</div>
+          </div>
+        </div>
+
+        <div style="{{ connPillStyle }}">
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ connDotColor }};box-shadow:0 0 0 0 {{ connDotColor }}"></span>
+          {{ connText }}
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px">
+          <span style="font-variant-numeric:tabular-nums;font-size:14px;font-weight:500;opacity:.85;font-feature-settings:'tnum'">{{ elapsedFmt }}</span>
+          <button onClick="{{ askEnd }}" style="background:#dc2626;color:#fff;border:none;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap">Akhiri Sesi</button>
+        </div>
+      </div>
+
+      <!-- layout switcher -->
+      <div style="{{ switcherWrapStyle }}">
+        <span style="font-size:12px;opacity:.55;margin-right:2px">Tampilan</span>
+        <div style="{{ segWrapStyle }}">
+          <button onClick="{{ setV1 }}" style="{{ seg1Style }}">Klasik</button>
+          <button onClick="{{ setV2 }}" style="{{ seg2Style }}">Imersif</button>
+          <button onClick="{{ setV3 }}" style="{{ seg3Style }}">Transkrip</button>
+        </div>
+      </div>
+
+      <!-- ===== connecting overlay ===== -->
+      <sc-if value="{{ isConnecting }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:60px 20px">
+          <span style="width:34px;height:34px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:spin .8s linear infinite"></span>
+          <div style="text-align:center"><div style="font-size:15px;font-weight:500;color:#0f172a">Menghubungkan ke pewawancara AI…</div><div style="font-size:13px;color:#8a929e;margin-top:4px">Menyiapkan koneksi suara</div></div>
+        </div>
+      </sc-if>
+
+      <!-- ===== VARIANT 1 — CLASSIC TWO COLUMN ===== -->
+      <sc-if value="{{ showV1 }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;max-width:1200px;width:100%;margin:0 auto;padding:24px;display:flex;gap:24px;flex-wrap:wrap;align-items:stretch">
+          <!-- left main -->
+          <div style="flex:1.5;min-width:320px;display:flex;flex-direction:column;gap:18px;position:relative">
+            <sc-if value="{{ isLost }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;z-index:20;background:rgba(247,248,249,.92);backdrop-filter:blur(3px);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+                <span style="width:30px;height:30px;border:3px solid #fde0e0;border-top-color:#dc2626;border-radius:50%;animation:spin .8s linear infinite"></span>
+                <div style="text-align:center"><div style="font-size:15px;font-weight:600;color:#b91c1c">Koneksi terputus</div><div style="font-size:13px;color:#7c8493;margin-top:3px">Mencoba menghubungkan kembali…</div></div>
+                <button onClick="{{ retry }}" style="background:#fff;border:1px solid #d8dade;font-size:13px;font-weight:500;padding:8px 16px;border-radius:8px;cursor:pointer">Coba sekarang</button>
+              </div>
+            </sc-if>
+
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="{{ statusBadgeStyle }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ statusDot }}"></span>{{ statusText }}</span>
+            </div>
+
+            <!-- visualizer -->
+            <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:30px 24px;display:flex;align-items:flex-end;justify-content:center;gap:4px;height:150px">
+              <sc-for list="{{ aiBars }}" as="b" hint-placeholder-count="28"><div style="{{ b.style }}"></div></sc-for>
+            </div>
+
+            <!-- question card -->
+            <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:24px">
+              <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#9aa1ad">Pertanyaan {{ qNumber }} dari {{ qTotal }}</div>
+              <p style="font-size:18px;line-height:1.5;color:#0f172a;margin-top:10px;text-wrap:pretty">{{ currentQuestion }}</p>
+            </div>
+
+            <!-- mic + waveform -->
+            <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:28px;display:flex;flex-direction:column;align-items:center;gap:16px">
+              <div style="position:relative;width:84px;height:84px;display:flex;align-items:center;justify-content:center">
+                <sc-if value="{{ micActive }}" hint-placeholder-val="{{ false }}">
+                  <span style="position:absolute;inset:0;border-radius:50%;background:#dc2626;animation:micRing 1.4s ease-out infinite"></span>
+                </sc-if>
+                <button onClick="{{ toggleMic }}" disabled="{{ micDisabled }}" style="{{ micBtnStyle }}">
+                  <sc-if value="{{ micActive }}" hint-placeholder-val="{{ false }}"><svg width="28" height="28" viewBox="0 0 24 24" fill="#fff" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg></sc-if>
+                  <sc-if value="{{ micIdle }}" hint-placeholder-val="{{ true }}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg></sc-if>
+                </button>
+              </div>
+              <div style="font-size:13.5px;color:#5b6471;font-weight:500">{{ micHint }}</div>
+              <div style="width:100%;height:40px;display:flex;align-items:center;justify-content:center;gap:3px">
+                <sc-for list="{{ userBars }}" as="b" hint-placeholder-count="40"><div style="{{ b.style }}"></div></sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- right transcript -->
+          <div style="flex:1;min-width:300px;display:flex;flex-direction:column;background:#fff;border:1px solid #ececef;border-radius:12px;overflow:hidden;max-height:640px">
+            <div style="padding:16px 20px;border-bottom:1px solid #f0f1f3;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#061f3d" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              Transkrip langsung
+            </div>
+            <div ref="{{ transcriptRef }}" style="flex:1;overflow-y:auto;padding:18px 18px 8px;display:flex;flex-direction:column;gap:12px;min-height:280px">
+              <sc-for list="{{ transcript }}" as="m" hint-placeholder-count="0">
+                <div style="{{ m.wrapStyle }}">
+                  <sc-if value="{{ m.showLabel }}" hint-placeholder-val="{{ false }}"><div style="{{ m.labelStyle }}">{{ m.label }}</div></sc-if>
+                  <div style="{{ m.bubbleStyle }}">{{ m.text }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:flex-start;background:#f1f3f5;border-radius:14px 14px 14px 4px;padding:13px 16px;display:flex;gap:5px">
+                  <span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite 0s"></span>
+                  <span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite .2s"></span>
+                  <span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite .4s"></span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ transcriptEmpty }}" hint-placeholder-val="{{ true }}"><div style="margin:auto;text-align:center;color:#aab0ba;font-size:13px;padding:30px 10px">Percakapan akan muncul di sini saat sesi dimulai.</div></sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== VARIANT 2 — IMMERSIVE ===== -->
+      <sc-if value="{{ showV2 }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;padding:40px 24px;position:relative">
+          <sc-if value="{{ isLost }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:18px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(220,38,38,.14);border:1px solid rgba(248,113,113,.4);color:#fecaca;font-size:13px;padding:8px 16px;border-radius:999px;display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border:2px solid rgba(254,202,202,.4);border-top-color:#fecaca;border-radius:50%;animation:spin .8s linear infinite"></span>Koneksi terputus — menghubungkan kembali</div>
+          </sc-if>
+          <span style="{{ statusBadgeStyleDark }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ statusDot }}"></span>{{ statusText }}</span>
+
+          <div style="display:flex;align-items:flex-end;justify-content:center;gap:5px;height:120px">
+            <sc-for list="{{ aiBarsLight }}" as="b" hint-placeholder-count="28"><div style="{{ b.style }}"></div></sc-for>
+          </div>
+
+          <p style="font-size:24px;line-height:1.45;font-weight:500;color:#fff;max-width:620px;text-align:center;text-wrap:pretty">{{ currentQuestion }}</p>
+          <div style="font-size:13px;color:#7a93b3">Pertanyaan {{ qNumber }} dari {{ qTotal }}</div>
+
+          <div style="position:relative;width:96px;height:96px;display:flex;align-items:center;justify-content:center;margin-top:6px">
+            <sc-if value="{{ micActive }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;border-radius:50%;background:#dc2626;animation:micRing 1.4s ease-out infinite"></span></sc-if>
+            <button onClick="{{ toggleMic }}" disabled="{{ micDisabled }}" style="{{ micBtnStyleLg }}">
+              <sc-if value="{{ micActive }}" hint-placeholder-val="{{ false }}"><svg width="30" height="30" viewBox="0 0 24 24" fill="#fff" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg></sc-if>
+              <sc-if value="{{ micIdle }}" hint-placeholder-val="{{ true }}"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg></sc-if>
+            </button>
+          </div>
+          <div style="font-size:13.5px;color:#9fb4d0;font-weight:500">{{ micHint }}</div>
+
+          <button onClick="{{ toggleDrawer }}" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#cdd9e8;font-size:13px;font-weight:500;padding:9px 18px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            {{ drawerLabel }}
+          </button>
+        </div>
+        <!-- drawer -->
+        <div style="{{ drawerStyle }}">
+          <div style="padding:16px 20px;border-bottom:1px solid #f0f1f3;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:space-between">Transkrip langsung<span onClick="{{ toggleDrawer }}" style="cursor:pointer;color:#9aa1ad"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"></path></svg></span></div>
+          <div ref="{{ transcriptRef2 }}" style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ transcript }}" as="m" hint-placeholder-count="0">
+              <div style="{{ m.wrapStyle }}"><sc-if value="{{ m.showLabel }}" hint-placeholder-val="{{ false }}"><div style="{{ m.labelStyle }}">{{ m.label }}</div></sc-if><div style="{{ m.bubbleStyle }}">{{ m.text }}</div></div>
+            </sc-for>
+            <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}"><div style="align-self:flex-start;background:#f1f3f5;border-radius:14px 14px 14px 4px;padding:13px 16px;display:flex;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite 0s"></span><span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite .2s"></span><span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite .4s"></span></div></sc-if>
+            <sc-if value="{{ transcriptEmpty }}" hint-placeholder-val="{{ true }}"><div style="margin:auto;text-align:center;color:#aab0ba;font-size:13px;padding:30px">Percakapan akan muncul di sini.</div></sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== VARIANT 3 — TRANSCRIPT LED ===== -->
+      <sc-if value="{{ showV3 }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;max-width:840px;width:100%;margin:0 auto;width:100%;min-height:0">
+          <div style="padding:16px 24px;border-bottom:1px solid #ececef;background:#fff;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span style="{{ statusBadgeStyle }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ statusDot }}"></span>{{ statusText }}</span>
+            <div style="font-size:13px;color:#5b6471;flex:1;min-width:160px"><span style="color:#9aa1ad">Pertanyaan {{ qNumber }}/{{ qTotal }}:</span> {{ currentQuestion }}</div>
+          </div>
+          <sc-if value="{{ isLost }}" hint-placeholder-val="{{ false }}"><div style="background:#fef2f2;border-bottom:1px solid #fecaca;color:#b91c1c;font-size:13px;padding:9px 24px;display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border:2px solid #fde0e0;border-top-color:#dc2626;border-radius:50%;animation:spin .8s linear infinite"></span>Koneksi terputus — mencoba menghubungkan kembali…</div></sc-if>
+          <div ref="{{ transcriptRef3 }}" style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:14px;min-height:0">
+            <sc-for list="{{ transcript }}" as="m" hint-placeholder-count="0">
+              <div style="{{ m.wrapStyle }}"><sc-if value="{{ m.showLabel }}" hint-placeholder-val="{{ false }}"><div style="{{ m.labelStyle }}">{{ m.label }}</div></sc-if><div style="{{ m.bubbleStyleWide }}">{{ m.text }}</div></div>
+            </sc-for>
+            <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}"><div style="align-self:flex-start;background:#f1f3f5;border-radius:14px 14px 14px 4px;padding:13px 16px;display:flex;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite 0s"></span><span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite .2s"></span><span style="width:7px;height:7px;border-radius:50%;background:#9aa1ad;animation:blink 1.2s infinite .4s"></span></div></sc-if>
+            <sc-if value="{{ transcriptEmpty }}" hint-placeholder-val="{{ true }}"><div style="margin:auto;text-align:center;color:#aab0ba;font-size:13px;padding:40px">Percakapan akan muncul di sini saat sesi dimulai.</div></sc-if>
+          </div>
+          <!-- control bar -->
+          <div style="border-top:1px solid #ececef;background:#fff;padding:16px 24px;display:flex;align-items:center;gap:18px">
+            <div style="flex:1;display:flex;align-items:center;gap:2px;height:34px">
+              <sc-for list="{{ aiBarsMini }}" as="b" hint-placeholder-count="40"><div style="{{ b.style }}"></div></sc-for>
+            </div>
+            <div style="position:relative;width:58px;height:58px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <sc-if value="{{ micActive }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;border-radius:50%;background:#dc2626;animation:micRing 1.4s ease-out infinite"></span></sc-if>
+              <button onClick="{{ toggleMic }}" disabled="{{ micDisabled }}" style="{{ micBtnStyleSm }}">
+                <sc-if value="{{ micActive }}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg></sc-if>
+                <sc-if value="{{ micIdle }}" hint-placeholder-val="{{ true }}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 11a7 7 0 0 1-14 0"></path><path d="M12 18v3"></path></svg></sc-if>
+              </button>
+            </div>
+            <div style="font-size:13px;color:#5b6471;width:96px;text-align:right">{{ micHint }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- end-session confirm -->
+      <sc-if value="{{ showEndConfirm }}" hint-placeholder-val="{{ false }}">
+        <div style="position:fixed;inset:0;z-index:60;background:rgba(6,31,61,.45);display:flex;align-items:center;justify-content:center;padding:20px">
+          <div style="background:#fff;border-radius:12px;padding:28px;max-width:380px;width:100%;animation:pop .15s ease;box-shadow:0 20px 50px rgba(6,31,61,.25)">
+            <h3 style="font-size:18px;font-weight:600;color:#0f172a">Akhiri sesi wawancara?</h3>
+            <p style="font-size:14px;color:#5b6471;line-height:1.55;margin-top:8px">Sesi akan dianalisis dan Anda akan melihat hasil serta umpan balik.</p>
+            <div style="display:flex;gap:10px;margin-top:24px">
+              <button onClick="{{ cancelEnd }}" style="flex:1;background:#fff;border:1px solid #d8dade;color:#0f172a;font-size:14px;font-weight:500;padding:11px;border-radius:8px;cursor:pointer">Lanjutkan</button>
+              <button onClick="{{ confirmEnd }}" style="flex:1;background:#dc2626;border:none;color:#fff;font-size:14px;font-weight:500;padding:11px;border-radius:8px;cursor:pointer">Akhiri Sesi</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ 5. RESULT & FEEDBACK ============ -->
+  <sc-if value="{{ isResult }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:860px;margin:0 auto;width:100%;padding:40px 24px 80px">
+      <sc-if value="{{ resultLoading }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:120px 20px">
+          <span style="width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:spin .8s linear infinite"></span>
+          <div style="font-size:15px;font-weight:500;color:#0f172a">Menganalisis jawaban Anda…</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ resultReady }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="font-size:13px;color:#8a929e;margin-bottom:6px">Sesi selesai · {{ resultMeta }}</div>
+          <h1 style="font-size:26px;font-weight:600;letter-spacing:-.02em">Hasil & Umpan Balik</h1>
+
+          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:24px">
+            <div style="flex:0 0 auto;width:200px;background:#061f3d;border-radius:12px;padding:28px;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+              <div style="font-size:13px;color:#9fb4d0;text-transform:uppercase;letter-spacing:.06em">Skor keseluruhan</div>
+              <div style="font-size:56px;font-weight:600;line-height:1.1;margin-top:6px">{{ overallScore }}</div>
+              <div style="font-size:14px;color:#9fb4d0">dari 10</div>
+              <div style="margin-top:12px;background:rgba(255,255,255,.12);font-size:12.5px;font-weight:500;padding:5px 12px;border-radius:999px">{{ scoreLabel }}</div>
+            </div>
+            <div style="flex:1;min-width:280px;background:#fff;border:1px solid #ececef;border-radius:12px;padding:24px">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:10px">Ringkasan</h3>
+              <p style="font-size:14.5px;line-height:1.65;color:#404a59;text-wrap:pretty">{{ resultSummary }}</p>
+            </div>
+          </div>
+
+          <h3 style="font-size:14px;font-weight:600;margin:32px 0 14px">Rincian penilaian</h3>
+          <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:8px 24px">
+            <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="4">
+              <div style="{{ m.rowStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+                  <div><div style="font-size:14px;font-weight:500;color:#0f172a">{{ m.label }}</div><div style="font-size:12.5px;color:#8a929e;margin-top:2px">{{ m.note }}</div></div>
+                  <div style="font-size:15px;font-weight:600;color:{{ m.color }}">{{ m.score }}</div>
+                </div>
+                <div style="height:6px;background:#eef0f2;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ m.pct }};background:{{ m.color }};border-radius:999px"></div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:24px">
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:22px">
+              <h3 style="font-size:14px;font-weight:600;color:#15803d;display:flex;align-items:center;gap:8px;margin-bottom:14px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>Yang sudah baik</h3>
+              <ul style="list-style:none;display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ strengths }}" as="s" hint-placeholder-count="3"><li style="font-size:13.5px;line-height:1.55;color:#296a40;display:flex;gap:9px"><span style="color:#16a34a;flex-shrink:0">•</span>{{ s }}</li></sc-for>
+              </ul>
+            </div>
+            <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:22px">
+              <h3 style="font-size:14px;font-weight:600;color:#b45309;display:flex;align-items:center;gap:8px;margin-bottom:14px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>Bisa ditingkatkan</h3>
+              <ul style="list-style:none;display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ improvements }}" as="s" hint-placeholder-count="2"><li style="font-size:13.5px;line-height:1.55;color:#7c5212;display:flex;gap:9px"><span style="color:#d97706;flex-shrink:0">•</span>{{ s }}</li></sc-for>
+              </ul>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-top:32px;flex-wrap:wrap">
+            <button onClick="{{ goDashboard }}" style="flex:1;min-width:200px;background:#061f3d;color:#fff;border:none;font-size:15px;font-weight:500;padding:14px;border-radius:8px;cursor:pointer">Kembali ke Dashboard</button>
+            <button onClick="{{ goHistory }}" style="background:#fff;border:1px solid #d8dade;color:#0f172a;font-size:15px;font-weight:500;padding:14px 22px;border-radius:8px;cursor:pointer">Lihat Riwayat</button>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ 6. HISTORY LIST ============ -->
+  <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:920px;margin:0 auto;width:100%;padding:40px 24px 80px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div><h1 style="font-size:26px;font-weight:600;letter-spacing:-.02em">Riwayat Sesi</h1><p style="font-size:15px;color:#5b6471;margin-top:6px">Tinjau sesi latihan Anda sebelumnya.</p></div>
+        <div style="display:flex;background:#f1f3f5;border-radius:8px;padding:4px">
+          <button onClick="{{ showFilled }}" style="{{ histFilledTab }}">Berisi</button>
+          <button onClick="{{ showEmpty }}" style="{{ histEmptyTab }}">Kosong</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ historyEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:64px 24px;text-align:center;margin-top:24px">
+          <div style="width:56px;height:56px;border-radius:14px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin:0 auto 18px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9aa1ad" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></div>
+          <h3 style="font-size:17px;font-weight:600;color:#0f172a">Belum ada sesi</h3>
+          <p style="font-size:14px;color:#5b6471;margin-top:7px;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.55">Anda belum menyelesaikan sesi wawancara. Mulai latihan pertama Anda untuk melihat riwayat di sini.</p>
+          <button onClick="{{ goDashboard }}" style="margin-top:22px;background:#2563eb;color:#fff;border:none;font-size:14px;font-weight:500;padding:11px 22px;border-radius:8px;cursor:pointer">Mulai sesi pertama</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ historyFilled }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:24px">
+          <sc-for list="{{ historyItems }}" as="h" hint-placeholder-count="4">
+            <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <div style="width:42px;height:42px;border-radius:10px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#061f3d;flex-shrink:0">{{ h.icon }}</div>
+              <div style="flex:1;min-width:140px"><div style="font-size:15px;font-weight:600;color:#0f172a">{{ h.field }}</div><div style="font-size:12.5px;color:#8a929e;margin-top:3px">{{ h.date }} · {{ h.duration }}</div></div>
+              <div style="{{ h.scoreBadgeStyle }}">{{ h.score }}</div>
+              <button onClick="{{ h.onView }}" style="background:#fff;border:1px solid #d8dade;color:#0f172a;font-size:13px;font-weight:500;padding:8px 16px;border-radius:8px;cursor:pointer;white-space:nowrap">Lihat Detail</button>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ============ 6b. HISTORY DETAIL ============ -->
+  <sc-if value="{{ isHistoryDetail }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:860px;margin:0 auto;width:100%;padding:32px 24px 80px">
+      <button onClick="{{ goHistory }}" style="background:none;border:none;color:#5b6471;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:20px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>Kembali ke Riwayat</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div><h1 style="font-size:24px;font-weight:600;letter-spacing:-.02em">{{ detailField }}</h1><p style="font-size:14px;color:#8a929e;margin-top:5px">{{ detailMeta }}</p></div>
+        <div style="{{ detailScoreBadge }}">{{ detailScore }} / 10</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px">
+        <div>
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Rincian penilaian</h3>
+          <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:8px 20px">
+            <sc-for list="{{ detailMetrics }}" as="m" hint-placeholder-count="4">
+              <div style="{{ m.rowStyle }}"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-size:13.5px;font-weight:500">{{ m.label }}</div><div style="font-size:14px;font-weight:600;color:{{ m.color }}">{{ m.score }}</div></div><div style="height:6px;background:#eef0f2;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ m.pct }};background:{{ m.color }};border-radius:999px"></div></div></div>
+            </sc-for>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;margin-top:16px">
+            <h3 style="font-size:13.5px;font-weight:600;color:#15803d;margin-bottom:10px">Umpan balik AI</h3>
+            <p style="font-size:13.5px;line-height:1.6;color:#296a40">{{ detailFeedback }}</p>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Transkrip</h3>
+          <div style="background:#fff;border:1px solid #ececef;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px;max-height:520px;overflow-y:auto">
+            <sc-for list="{{ detailTranscript }}" as="m" hint-placeholder-count="4">
+              <div style="{{ m.wrapStyle }}"><sc-if value="{{ m.showLabel }}" hint-placeholder-val="{{ false }}"><div style="{{ m.labelStyle }}">{{ m.label }}</div></sc-if><div style="{{ m.bubbleStyle }}">{{ m.text }}</div></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <button onClick="{{ goDashboard }}" style="margin-top:28px;background:#061f3d;color:#fff;border:none;font-size:15px;font-weight:500;padding:14px 24px;border-radius:8px;cursor:pointer">Kembali ke Dashboard</button>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;landing&quot;,&quot;auth&quot;,&quot;dashboard&quot;,&quot;session&quot;,&quot;result&quot;,&quot;history&quot;],&quot;default&quot;:&quot;landing&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;userName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Andi&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;interviewLayout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1&quot;,&quot;2&quot;,&quot;3&quot;],&quot;default&quot;:&quot;1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    const layout = parseInt(props.interviewLayout || '1', 10) || 1;
+    this.state = {
+      screen: props.startScreen || 'landing',
+      authMode: 'login',
+      form: { name:'', email:'', password:'' },
+      errEmail:'', errPassword:'',
+      authLoading:false,
+      userName: props.userName || 'Andi',
+      selectedField: null,
+      jobTitle:'', company:'', jobDesc:'', cvName:'', dragOver:false,
+      variant: layout,
+      connection:'idle', // idle|connecting|connected|lost
+      speaker:'idle',    // idle|ai|user
+      micActive:false, typing:false,
+      qIndex:0, elapsed:0, transcript:[],
+      showEndConfirm:false, resultLoading:false,
+      showDrawer:false,
+      historyMode:'filled',
+      detail:null,
+      lostDone:false,
+    };
+    this.transcriptRef = React.createRef();
+    this.transcriptRef2 = React.createRef();
+    this.transcriptRef3 = React.createRef();
+    this._timeouts = [];
+    // fixed bar specs
+    const rnd = (a,b)=> a + Math.random()*(b-a);
+    this._aiSpecs = Array.from({length:28},()=>({h:Math.round(rnd(34,100)), d:rnd(.6,1.25).toFixed(2), del:rnd(0,.9).toFixed(2)}));
+    this._userSpecs = Array.from({length:40},()=>({h:Math.round(rnd(20,100)), d:rnd(.4,.9).toFixed(2), del:rnd(0,.6).toFixed(2)}));
+    this._miniSpecs = Array.from({length:40},()=>({h:Math.round(rnd(25,100)), d:rnd(.5,1).toFixed(2), del:rnd(0,.7).toFixed(2)}));
+  }
+
+  // ---- static content ----
+  get questions(){ return [
+    'Terima kasih sudah hadir. Bisa ceritakan sedikit tentang diri Anda dan latar belakang Anda?',
+    'Mengapa Anda tertarik dengan posisi ini, dan apa yang Anda ketahui tentang perannya?',
+    'Ceritakan satu pencapaian yang paling Anda banggakan dan bagaimana Anda mencapainya.',
+    'Bagaimana cara Anda menangani tekanan atau tenggat waktu yang ketat?',
+    'Apakah Anda punya pertanyaan untuk kami sebelum sesi ini kita akhiri?'
+  ]; }
+  get answers(){ return [
+    'Saya lulusan Teknik Informatika dengan tiga tahun pengalaman membangun aplikasi web di startup logistik…',
+    'Saya tertarik karena peran ini sejalan dengan keahlian saya di pengembangan produk dan misi perusahaan…',
+    'Saya memimpin migrasi sistem yang menurunkan waktu muat sebesar 40 persen dalam dua bulan…',
+    'Saya membuat prioritas tugas, berkomunikasi lebih awal dengan tim, dan memecah pekerjaan jadi target kecil…',
+    'Bagaimana proses onboarding untuk anggota tim baru di perusahaan ini?'
+  ]; }
+  get feedbacks(){ return [
+    'Pembukaan yang baik. Sebutkan satu pencapaian spesifik di awal agar lebih menonjol.',
+    'Bagus, Anda menghubungkan motivasi dengan peran. Tambahkan hasil riset tentang perusahaan.',
+    'Contoh yang kuat dengan angka. Gunakan struktur STAR agar lebih runtut.',
+    'Jawaban solid. Berikan satu contoh nyata situasi penuh tekanan yang pernah Anda alami.',
+    'Pertanyaan yang relevan dan menunjukkan ketertarikan Anda pada peran.'
+  ]; }
+  fieldDefs(){ return [
+    {id:'it', title:'Teknologi Informasi', desc:'Software, data, infrastruktur', icon:'it'},
+    {id:'mkt', title:'Pemasaran', desc:'Brand, digital, pertumbuhan', icon:'mkt'},
+    {id:'fin', title:'Keuangan', desc:'Akuntansi, analis, audit', icon:'fin'},
+    {id:'hr', title:'SDM', desc:'Rekrutmen, people ops', icon:'hr'},
+    {id:'edu', title:'Pendidikan', desc:'Pengajar, kurikulum', icon:'edu'},
+    {id:'other', title:'Lainnya', desc:'Bidang lain di luar daftar', icon:'other'},
+  ]; }
+
+  // ---- icon factory ----
+  _svg(children, opts){ opts=opts||{}; return React.createElement('svg',{width:opts.size||'20',height:opts.size||'20',viewBox:'0 0 24 24',fill:opts.fill||'none',stroke:opts.fill?'none':'currentColor',strokeWidth:opts.sw||1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{display:'block'}}, children); }
+  _p(d){ return React.createElement('path',{d,key:d}); }
+  _c(cx,cy,r){ return React.createElement('circle',{cx,cy,r,key:cx+'-'+cy}); }
+  icon(name,size){
+    size = size||20;
+    switch(name){
+      case 'it': return this._svg([this._p('M8 9l-3 3 3 3'),this._p('M16 9l3 3-3 3'),this._p('M13.5 7l-3 10')],{size});
+      case 'mkt': return this._svg([this._p('M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z'),this._p('M14 8.5a3.5 3.5 0 0 1 0 7')],{size});
+      case 'fin': return this._svg([this._p('M4 19h16'),this._p('M7 16V10'),this._p('M12 16V5'),this._p('M17 16v-4')],{size});
+      case 'hr': return this._svg([this._c(9,8,3),this._p('M3.5 19a5.5 5.5 0 0 1 11 0'),this._p('M16 6.2a3 3 0 0 1 0 5.6'),this._p('M18 19a5.5 5.5 0 0 0-3-4.9')],{size});
+      case 'edu': return this._svg([this._p('M3 8l9-4 9 4-9 4-9-4z'),this._p('M7 10.5V15c0 1.2 2.3 2.5 5 2.5s5-1.3 5-2.5v-4.5'),this._p('M21 8v5')],{size});
+      default: return this._svg([this._c(5,12,1.3),this._c(12,12,1.3),this._c(19,12,1.3)],{size,fill:'currentColor'});
+    }
+  }
+
+  // ---- helpers ----
+  push(t){ const c=setTimeout(t,0); }
+  later(fn,ms){ const t=setTimeout(()=>{ fn(); }, ms); this._timeouts.push(t); return t; }
+  clearTimers(){ this._timeouts.forEach(clearTimeout); this._timeouts=[]; if(this._tick){clearInterval(this._tick);this._tick=null;} }
+  componentWillUnmount(){ this.clearTimers(); }
+  componentDidUpdate(){
+    [this.transcriptRef,this.transcriptRef2,this.transcriptRef3].forEach(r=>{ if(r.current){ r.current.scrollTop = r.current.scrollHeight; } });
+  }
+  scoreColor(s){ s=parseFloat(s); return s>=8?'#16a34a':(s>=6.5?'#d97706':'#dc2626'); }
+  scoreBadge(s){ const c=this.scoreColor(s); const bg=s>=8?'#f0fdf4':(s>=6.5?'#fffbeb':'#fef2f2'); const bd=s>=8?'#bbf7d0':(s>=6.5?'#fde68a':'#fecaca'); return {background:bg,border:'1px solid '+bd,color:c,fontSize:'14px',fontWeight:600,padding:'4px 11px',borderRadius:'8px',flexShrink:0}; }
+
+  // ---- navigation ----
+  go(screen){ if(this.state.screen==='session' && screen!=='session'){ this.clearTimers(); } this.setState({screen, showEndConfirm:false}); window.scrollTo&&window.scrollTo(0,0); }
+
+  // ---- auth ----
+  submitAuth(){
+    const {form,authMode}=this.state;
+    let ee='', ep='';
+    if(!form.email.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) ee='Masukkan email yang valid.';
+    if(!form.password || form.password.length<6) ep='Kata sandi minimal 6 karakter.';
+    if(ee||ep){ this.setState({errEmail:ee, errPassword:ep}); return; }
+    this.setState({errEmail:'',errPassword:'',authLoading:true});
+    this.later(()=>{
+      const name = authMode==='register' && this.state.form.name.trim() ? this.state.form.name.trim().split(' ')[0] : this.state.userName;
+      this.setState({authLoading:false, userName:name, screen:'dashboard'});
+    }, 850);
+  }
+
+  // ---- session flow ----
+  startSession(){
+    if(!this.state.selectedField) return;
+    this.clearTimers();
+    this.setState({screen:'session', connection:'connecting', speaker:'idle', micActive:false, typing:false, qIndex:0, elapsed:0, transcript:[], lostDone:false, showDrawer:false});
+    window.scrollTo&&window.scrollTo(0,0);
+    this.later(()=>{
+      this.setState({connection:'connected'});
+      this._tick = setInterval(()=>{ this.setState(s=> s.connection==='lost'?{}:{elapsed:s.elapsed+1}); }, 1000);
+      this.aiAsk(0);
+      // scripted connection blip for the "lost" state
+      this.later(()=>{ if(this.state.screen==='session' && !this.state.lostDone){ this.setState({connection:'lost',lostDone:true}); this.later(()=>{ if(this.state.screen==='session') this.setState({connection:'connected'}); }, 2600); } }, 11000);
+    }, 1300);
+  }
+  aiAsk(i){
+    this.setState({speaker:'ai', typing:false, qIndex:i, transcript:[...this.state.transcript, {role:'ai', text:this.questions[i]}]});
+    this.later(()=>{ if(this.state.screen==='session') this.setState({speaker:'idle'}); }, 2600);
+  }
+  toggleMic(){
+    if(this.state.connection!=='connected') return;
+    if(!this.state.micActive){
+      this.setState({micActive:true, speaker:'user', typing:false});
+    } else {
+      const i=this.state.qIndex;
+      this.setState({micActive:false, speaker:'idle', transcript:[...this.state.transcript,{role:'user',text:this.answers[i]||'…'}]});
+      this.later(()=>{ if(this.state.screen!=='session')return; this.setState({typing:true}); }, 300);
+      this.later(()=>{
+        if(this.state.screen!=='session')return;
+        this.setState({typing:false, transcript:[...this.state.transcript,{role:'feedback',text:this.feedbacks[i]||'…'}]});
+        this.later(()=>{ if(this.state.screen!=='session')return; if(i+1<this.questions.length){ this.aiAsk(i+1); } else { this.setState({speaker:'idle'}); } }, 1500);
+      }, 1900);
+    }
+  }
+  confirmEnd(){
+    this.clearTimers();
+    this.setState({screen:'result', showEndConfirm:false, resultLoading:true, micActive:false});
+    window.scrollTo&&window.scrollTo(0,0);
+    this.later(()=>this.setState({resultLoading:false}), 1400);
+  }
+
+  // ---- data: recent / history ----
+  recent(){ return [
+    {id:'r1',field:'Teknologi Informasi',icon:'it',date:'14 Jun 2026',duration:'12 menit',score:'8.2'},
+    {id:'r2',field:'Pemasaran',icon:'mkt',date:'10 Jun 2026',duration:'9 menit',score:'7.1'},
+    {id:'r3',field:'Keuangan',icon:'fin',date:'2 Jun 2026',duration:'15 menit',score:'6.4'},
+  ]; }
+  history(){ return [
+    {id:'h1',field:'Teknologi Informasi',icon:'it',date:'14 Jun 2026',duration:'12 menit',score:'8.2'},
+    {id:'h2',field:'Pemasaran',icon:'mkt',date:'10 Jun 2026',duration:'9 menit',score:'7.1'},
+    {id:'h3',field:'Keuangan',icon:'fin',date:'2 Jun 2026',duration:'15 menit',score:'6.4'},
+    {id:'h4',field:'Sumber Daya Manusia',icon:'hr',date:'28 Mei 2026',duration:'11 menit',score:'7.8'},
+  ]; }
+  detailFor(item){
+    return {
+      field:item.field, meta:item.date+' · '+item.duration,
+      score:item.score,
+      metrics:[
+        {label:'Komunikasi',score:'8.5'},{label:'Relevansi Jawaban',score:'8.0'},
+        {label:'Struktur (STAR)',score:'7.0'},{label:'Kepercayaan Diri',score:'8.0'}
+      ],
+      feedback:'Secara keseluruhan jawaban Anda jelas dan relevan dengan peran. Pertahankan contoh berbasis data, dan rapikan struktur cerita menggunakan kerangka STAR agar lebih mudah diikuti.',
+      transcript:[
+        {role:'ai',text:'Bisa ceritakan tentang diri Anda?'},
+        {role:'user',text:'Saya lulusan Teknik Informatika dengan tiga tahun pengalaman…'},
+        {role:'feedback',text:'Pembukaan baik — tambahkan satu pencapaian utama.'},
+        {role:'ai',text:'Mengapa Anda tertarik dengan posisi ini?'},
+        {role:'user',text:'Karena peran ini sejalan dengan keahlian saya…'},
+      ]
+    };
+  }
+
+  // ---- bar styling ----
+  barStyle(spec, active, color, maxW){
+    return { flex:'1', maxWidth:(maxW||'8px'), minWidth:'3px', background:color, borderRadius:'4px', height:spec.h+'%', transformOrigin:'bottom', transform: active?'none':'scaleY(0.16)', animation: active?('barPulse '+spec.d+'s ease-in-out '+spec.del+'s infinite'):'none', transition:'transform .35s ease' };
+  }
+
+  // ---- transcript bubble styling ----
+  bubble(m, wide){
+    if(m.role==='user'){
+      return { wrapStyle:{alignSelf:'flex-end',maxWidth:wide?'74%':'86%',display:'flex',flexDirection:'column',alignItems:'flex-end',animation:'fadeUp .25s ease'}, showLabel:false, bubbleStyle:{background:'#2563eb',color:'#fff',fontSize:'13.5px',lineHeight:'1.5',padding:'11px 14px',borderRadius:'14px 14px 4px 14px'} };
+    }
+    if(m.role==='feedback'){
+      return { wrapStyle:{alignSelf:'flex-start',maxWidth:wide?'80%':'92%',display:'flex',flexDirection:'column',alignItems:'flex-start',animation:'fadeUp .25s ease'}, showLabel:true, label:'Umpan balik', labelStyle:{fontSize:'11px',fontWeight:600,color:'#16a34a',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'.04em'}, bubbleStyle:{background:'#f0fdf4',border:'1px solid #bbf7d0',color:'#296a40',fontSize:'13px',lineHeight:'1.5',padding:'11px 14px',borderRadius:'4px 14px 14px 14px'} };
+    }
+    return { wrapStyle:{alignSelf:'flex-start',maxWidth:wide?'74%':'86%',display:'flex',flexDirection:'column',alignItems:'flex-start',animation:'fadeUp .25s ease'}, showLabel:true, label:'Pewawancara AI', labelStyle:{fontSize:'11px',fontWeight:600,color:'#9aa1ad',marginBottom:'5px'}, bubbleStyle:{background:'#f1f3f5',color:'#1f2937',fontSize:'13.5px',lineHeight:'1.5',padding:'11px 14px',borderRadius:'4px 14px 14px 14px'} };
+  }
+
+  renderVals(){
+    const s = this.state;
+    const screen = s.screen;
+    const isReg = s.authMode==='register';
+    const navLink = (active)=>({color:active?'#fff':'#94a3b8',textDecoration:'none',fontSize:'14px',fontWeight:500,cursor:'pointer',transition:'color .15s'});
+    const tab = (active)=>({flex:1,background:active?'#fff':'transparent',color:active?'#0f172a':'#6b7280',border:'none',fontSize:'14px',fontWeight:500,padding:'9px',borderRadius:'6px',cursor:'pointer',boxShadow:active?'0 1px 2px rgba(16,24,40,.06)':'none'});
+    const inputBase = (err)=>({width:'100%',border:'1px solid '+(err?'#fca5a5':'#d8dade'),borderRadius:'8px',padding:'11px 14px',fontSize:'14px',color:'#0f172a',outline:'none',background:'#fff'});
+
+    // fields
+    const fields = this.fieldDefs().map(f=>{
+      const selected = s.selectedField===f.id;
+      return { ...f, selected,
+        icon:this.icon(f.icon,22),
+        onClick:()=>this.setState({selectedField:f.id}),
+        style:{display:'flex',gap:'14px',alignItems:'flex-start',background:selected?'#eff6ff':'#fff',border:'1px solid '+(selected?'#2563eb':'#ececef'),borderRadius:'12px',padding:'18px',cursor:'pointer',transition:'all .15s',boxShadow:selected?'0 0 0 1px #2563eb':'none'},
+        iconWrapStyle:{width:'40px',height:'40px',borderRadius:'10px',background:selected?'#dbeafe':'#f1f5f9',color:selected?'#2563eb':'#061f3d',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}
+      };
+    });
+
+    // recent sessions
+    const recentSessions = this.recent().map((r,i,arr)=>({ ...r, icon:this.icon(r.icon,18),
+      onClick:()=>this.setState({detail:this.detailFor(r), screen:'historyDetail'}),
+      rowStyle:{display:'flex',alignItems:'center',gap:'14px',padding:'15px 20px',cursor:'pointer',borderBottom:i<arr.length-1?'1px solid #f0f1f3':'none'},
+      scoreBadgeStyle:this.scoreBadge(r.score) }));
+
+    // session derived
+    const fieldTitle = (this.fieldDefs().find(f=>f.id===s.selectedField)||{}).title || 'Wawancara Umum';
+    const ctx = s.jobTitle ? (s.jobTitle + (s.company?(' · '+s.company):'')) : 'Konteks umum';
+    const connMap = {connecting:{c:'#d97706',t:'Menghubungkan…'}, connected:{c:'#16a34a',t:'Terhubung'}, lost:{c:'#dc2626',t:'Koneksi terputus'}, idle:{c:'#9aa1ad',t:'Siap'}};
+    const conn = connMap[s.connection]||connMap.idle;
+    const statusMap = { ai:{t:'AI sedang berbicara',d:'#2563eb'}, user:{t:'Mendengarkan jawaban Anda',d:'#dc2626'}, idle:{t:'Menunggu jawaban Anda',d:'#9aa1ad'} };
+    const st = statusMap[s.speaker]||statusMap.idle;
+    const dark = s.variant===2;
+    const aiActive = s.speaker==='ai' && s.connection==='connected';
+    const userActive = s.micActive;
+
+    const aiBars = this._aiSpecs.map((b,i)=>({key:i, style:this.barStyle(b, aiActive, '#061f3d','8px')}));
+    const aiBarsLight = this._aiSpecs.map((b,i)=>({key:i, style:this.barStyle(b, aiActive, '#5b9bf5','7px')}));
+    const aiBarsMini = this._miniSpecs.map((b,i)=>({key:i, style:this.barStyle(b, aiActive||userActive, aiActive?'#061f3d':'#cbd5e1','5px')}));
+    const userBars = this._userSpecs.map((b,i)=>({key:i, style:this.barStyle(b, userActive, '#1e3a5f','5px')}));
+
+    const transcript = s.transcript.map((m,i)=>{ const b=this.bubble(m,false); return {...b, key:i, text:m.text, bubbleStyleWide:this.bubble(m,true).bubbleStyle}; });
+
+    const micDisabled = s.connection!=='connected';
+    const micColor = s.micActive?'#dc2626':(micDisabled?'#94a3b8':'#061f3d');
+    const micBtn = (size)=>({position:'relative',zIndex:1,width:size+'px',height:size+'px',borderRadius:'50%',background:micColor,border:'none',cursor:micDisabled?'not-allowed':'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:micDisabled?.6:1,transition:'background .2s',boxShadow:'0 2px 8px rgba(6,31,61,.18)'});
+
+    // result / detail
+    const resMetricsRaw = [
+      {label:'Komunikasi',score:'8.5',note:'Artikulasi jelas dan percaya diri.'},
+      {label:'Relevansi Jawaban',score:'8.0',note:'Jawaban sesuai konteks peran.'},
+      {label:'Struktur (STAR)',score:'7.0',note:'Beberapa jawaban kurang terstruktur.'},
+      {label:'Kepercayaan Diri',score:'8.2',note:'Nada bicara stabil dan meyakinkan.'},
+    ];
+    const metrics = resMetricsRaw.map((m,i,arr)=>({...m, color:this.scoreColor(m.score), pct:(parseFloat(m.score)*10)+'%', rowStyle:{padding:'16px 0',borderBottom:i<arr.length-1?'1px solid #f0f1f3':'none'}}));
+    const overall='8.0';
+
+    const d = s.detail||{};
+    const detailMetrics = (d.metrics||[]).map((m,i,arr)=>({...m, color:this.scoreColor(m.score), pct:(parseFloat(m.score)*10)+'%', rowStyle:{padding:'14px 0',borderBottom:i<arr.length-1?'1px solid #f0f1f3':'none'}}));
+    const detailTranscript = (d.transcript||[]).map((m,i)=>{ const b=this.bubble(m,false); return {...b,key:i,text:m.text}; });
+
+    const historyItems = this.history().map(h=>({...h, icon:this.icon(h.icon,18), scoreBadgeStyle:this.scoreBadge(h.score), onView:()=>this.setState({detail:this.detailFor(h), screen:'historyDetail'})}));
+
+    return {
+      // nav
+      showNav: ['dashboard','history','result','historyDetail'].includes(screen),
+      navDashStyle:navLink(screen==='dashboard'), navHistStyle:navLink(screen==='history'||screen==='historyDetail'), navProfStyle:navLink(false),
+      goProfile:()=>{}, userInitial:(s.userName||'A').charAt(0).toUpperCase(),
+      isLanding:screen==='landing', isAuth:screen==='auth', isDashboard:screen==='dashboard', isSession:screen==='session', isResult:screen==='result', isHistory:screen==='history', isHistoryDetail:screen==='historyDetail',
+      goLanding:()=>this.go('landing'), goAuth:()=>this.go('auth'), goDashboard:()=>this.go('dashboard'), goHistory:()=>this.go('history'),
+
+      // auth
+      authTitle:isReg?'Buat akun':'Selamat datang kembali', authSubtitle:isReg?'Mulai berlatih wawancara hari ini.':'Masuk untuk melanjutkan latihan Anda.',
+      isRegister:isReg, isLogin:!isReg,
+      tabLoginStyle:tab(!isReg), tabRegisterStyle:tab(isReg),
+      setLogin:()=>this.setState({authMode:'login',errEmail:'',errPassword:''}), setRegister:()=>this.setState({authMode:'register',errEmail:'',errPassword:''}),
+      toggleAuth:()=>this.setState({authMode:isReg?'login':'register',errEmail:'',errPassword:''}),
+      form:s.form,
+      onName:(e)=>{const v=e.target.value;this.setState(st=>({form:{...st.form,name:v}}));},
+      onEmail:(e)=>{const v=e.target.value;this.setState(st=>({form:{...st.form,email:v}}));},
+      onPassword:(e)=>{const v=e.target.value;this.setState(st=>({form:{...st.form,password:v}}));},
+      errEmail:s.errEmail, errPassword:s.errPassword,
+      nameInputStyle:inputBase(false), emailInputStyle:inputBase(!!s.errEmail), passInputStyle:inputBase(!!s.errPassword),
+      authLoading:s.authLoading, submitAuth:()=>this.submitAuth(),
+      authSubmitLabel:s.authLoading?'Memproses…':(isReg?'Daftar':'Masuk'),
+      authSubmitStyle:{display:'flex',alignItems:'center',justifyContent:'center',gap:'9px',width:'100%',background:'#2563eb',color:'#fff',border:'none',fontSize:'15px',fontWeight:500,padding:'12px',borderRadius:'8px',cursor:s.authLoading?'wait':'pointer',opacity:s.authLoading?.85:1,marginTop:'4px'},
+      authSwitchPrompt:isReg?'Sudah punya akun?':'Belum punya akun?', authSwitchAction:isReg?'Masuk':'Daftar',
+
+      // dashboard
+      userName:s.userName, fields, recentSessions,
+      jobTitle:s.jobTitle, company:s.company, jobDesc:s.jobDesc,
+      onJobTitle:(e)=>this.setState({jobTitle:e.target.value}), onCompany:(e)=>this.setState({company:e.target.value}), onJobDesc:(e)=>this.setState({jobDesc:e.target.value}),
+      plainInputStyle:inputBase(false),
+      jobDescCount:s.jobDesc.length, jobDescReady:s.jobDesc.trim().length>40,
+      pickCv:()=>{ const el=document.getElementById('cvfile'); if(el) el.click(); },
+      onCvFile:(e)=>{ const f=e.target.files&&e.target.files[0]; if(f) this.setState({cvName:f.name}); },
+      onDragOver:(e)=>{ e.preventDefault(); if(!s.dragOver) this.setState({dragOver:true}); },
+      onDragLeave:(e)=>{ e.preventDefault(); this.setState({dragOver:false}); },
+      onDrop:(e)=>{ e.preventDefault(); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; this.setState({dragOver:false, cvName:f?f.name:'CV_terunggah.pdf'}); },
+      clearCv:(e)=>{ e.stopPropagation(); this.setState({cvName:''}); },
+      cvName:s.cvName, noCv:!s.cvName,
+      dropZoneStyle:{border:'1.5px dashed '+(s.dragOver?'#2563eb':'#d8dade'),background:s.dragOver?'#eff6ff':'#fafbfc',borderRadius:'10px',padding:'24px',cursor:'pointer',transition:'all .15s',display:'flex',alignItems:'center',justifyContent:'center'},
+      startDisabled:!s.selectedField,
+      startBtnLabel:s.selectedField?'Mulai Sesi Wawancara':'Pilih bidang untuk mulai',
+      startBtnStyle:{width:'100%',marginTop:'24px',background:s.selectedField?'#061f3d':'#e5e7eb',color:s.selectedField?'#fff':'#9aa1ad',border:'none',fontSize:'16px',fontWeight:500,padding:'15px',borderRadius:'8px',cursor:s.selectedField?'pointer':'not-allowed',transition:'all .15s'},
+      startSession:()=>this.startSession(),
+
+      // session chrome
+      sessionRootStyle:{flex:1,display:'flex',flexDirection:'column',background:dark?'#061f3d':'#f7f8f9',minHeight:'100vh',color:dark?'#e7eef7':'#0f172a'},
+      sessionBarStyle:{background:dark?'rgba(255,255,255,.04)':'#061f3d',color:'#fff',height:'58px',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 20px',gap:'16px',position:'sticky',top:0,zIndex:30,borderBottom:dark?'1px solid rgba(255,255,255,.08)':'none'},
+      sessionFg:'#fff',
+      sessionField:fieldTitle, sessionContext:ctx,
+      connPillStyle:{display:'flex',alignItems:'center',gap:'7px',background:'rgba(255,255,255,.08)',padding:'6px 13px',borderRadius:'999px',fontSize:'12.5px',fontWeight:500,whiteSpace:'nowrap'},
+      connDotColor:conn.c, connText:conn.t,
+      elapsedFmt:this.fmt(s.elapsed),
+      askEnd:()=>this.setState({showEndConfirm:true}), cancelEnd:()=>this.setState({showEndConfirm:false}), confirmEnd:()=>this.confirmEnd(), showEndConfirm:s.showEndConfirm,
+      isConnecting:s.connection==='connecting', isLost:s.connection==='lost',
+      retry:()=>this.setState({connection:'connected'}),
+
+      // switcher
+      switcherWrapStyle:{maxWidth:'1200px',width:'100%',margin:'0 auto',padding:'14px 24px 0',display:'flex',alignItems:'center',justifyContent:'flex-end',gap:'8px',color:dark?'#9fb4d0':'#5b6471'},
+      segWrapStyle:{display:'flex',background:dark?'rgba(255,255,255,.07)':'#eceef1',borderRadius:'8px',padding:'3px'},
+      seg1Style:this.seg(s.variant===1,dark), seg2Style:this.seg(s.variant===2,dark), seg3Style:this.seg(s.variant===3,dark),
+      setV1:()=>this.setState({variant:1}), setV2:()=>this.setState({variant:2}), setV3:()=>this.setState({variant:3}),
+      showV1:s.variant===1 && s.connection!=='connecting',
+      showV2:s.variant===2 && s.connection!=='connecting',
+      showV3:s.variant===3 && s.connection!=='connecting',
+
+      // status + bars + mic
+      statusText:st.t, statusDot:st.d,
+      statusBadgeStyle:{display:'inline-flex',alignItems:'center',gap:'7px',background:'#fff',border:'1px solid #ececef',borderRadius:'999px',padding:'7px 14px',fontSize:'13px',fontWeight:500,color:'#0f172a'},
+      statusBadgeStyleDark:{display:'inline-flex',alignItems:'center',gap:'8px',background:'rgba(255,255,255,.08)',borderRadius:'999px',padding:'8px 16px',fontSize:'13.5px',fontWeight:500,color:'#cdd9e8'},
+      aiBars, aiBarsLight, aiBarsMini, userBars,
+      qNumber:s.qIndex+1, qTotal:this.questions.length,
+      currentQuestion: s.transcript.length? (this.questions[s.qIndex]) : (s.connection==='connected'?this.questions[0]:'Menyiapkan pertanyaan…'),
+      micActive:s.micActive, micIdle:!s.micActive, micDisabled, toggleMic:()=>this.toggleMic(),
+      micBtnStyle:micBtn(72), micBtnStyleLg:micBtn(84), micBtnStyleSm:micBtn(52),
+      micHint: micDisabled?'Menunggu koneksi…':(s.micActive?'Ketuk untuk berhenti & kirim':'Ketuk untuk menjawab'),
+      transcript, typing:s.typing, transcriptEmpty:s.transcript.length===0 && !s.typing,
+      transcriptRef:this.transcriptRef, transcriptRef2:this.transcriptRef2, transcriptRef3:this.transcriptRef3,
+      // drawer (v2)
+      toggleDrawer:()=>this.setState({showDrawer:!s.showDrawer}), drawerLabel:s.showDrawer?'Sembunyikan transkrip':'Lihat transkrip',
+      drawerStyle:{position:'fixed',top:0,right:0,bottom:0,width:'min(380px,86vw)',background:'#fff',color:'#0f172a',zIndex:50,display:'flex',flexDirection:'column',boxShadow:'-8px 0 30px rgba(6,31,61,.2)',transform:s.showDrawer?'translateX(0)':'translateX(100%)',transition:'transform .25s ease'},
+
+      // result
+      resultLoading:s.resultLoading, resultReady:!s.resultLoading,
+      resultMeta:fieldTitle+' · '+this.fmt(s.elapsed||720), overallScore:overall,
+      scoreLabel: parseFloat(overall)>=8?'Sangat baik':(parseFloat(overall)>=6.5?'Cukup baik':'Perlu latihan'),
+      resultSummary:'Anda menyampaikan jawaban dengan jelas dan relevan terhadap peran. Kekuatan utama Anda ada pada komunikasi dan penggunaan contoh konkret. Untuk meningkat lebih jauh, rapikan struktur cerita dengan kerangka STAR dan sertakan hasil yang terukur pada setiap contoh.',
+      metrics,
+      strengths:['Komunikasi jelas dan mudah diikuti','Memberikan contoh dengan data konkret','Antusiasme terhadap peran terlihat jelas'],
+      improvements:['Gunakan kerangka STAR secara konsisten','Tambahkan hasil terukur pada setiap pencapaian'],
+
+      // history
+      historyMode:s.historyMode, historyEmpty:s.historyMode==='empty', historyFilled:s.historyMode==='filled',
+      showFilled:()=>this.setState({historyMode:'filled'}), showEmpty:()=>this.setState({historyMode:'empty'}),
+      histFilledTab:tab(s.historyMode==='filled'), histEmptyTab:tab(s.historyMode==='empty'),
+      historyItems,
+      // detail
+      detailField:d.field, detailMeta:d.meta, detailScore:d.score, detailScoreBadge:this.scoreBadge(d.score||'0'),
+      detailMetrics, detailFeedback:d.feedback, detailTranscript,
+    };
+  }
+  fmt(sec){ sec=Math.max(0,sec|0); const m=Math.floor(sec/60), x=sec%60; return (m<10?'0':'')+m+':'+(x<10?'0':'')+x; }
+  seg(active,dark){ return {background:active?(dark?'rgba(255,255,255,.16)':'#fff'):'transparent',color:active?(dark?'#fff':'#0f172a'):(dark?'#9fb4d0':'#5b6471'),border:'none',fontSize:'13px',fontWeight:500,padding:'6px 14px',borderRadius:'6px',cursor:'pointer',boxShadow:active&&!dark?'0 1px 2px rgba(16,24,40,.08)':'none'}; }
+}
+</script>
+</body>
+</html>

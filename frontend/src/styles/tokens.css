@@ -1,0 +1,117 @@
+/**
+ * Design tokens — mapped from docs/design_handoff_interviewai (§"Design Tokens").
+ * Exposed as Tailwind v4 theme variables so utilities like `bg-navy`,
+ * `text-ink`, `rounded-card`, `font-sans` are generated.
+ */
+@theme {
+  /* Brand / structure */
+  --color-navy: #061f3d;
+  --color-blue: #2563eb;
+  --color-blue-hover: #1e3a5f;
+  --color-blue-light: #5b9bf5;
+
+  /* Surfaces */
+  --color-page: #f7f8f9;
+  --color-surface: #ffffff;
+
+  /* Borders */
+  --color-border: #ececef;
+  --color-border-input: #d8dade;
+  --color-border-subtle: #f0f1f3;
+
+  /* Text */
+  --color-ink: #0f172a;
+  --color-ink-secondary: #5b6471;
+  --color-ink-muted: #8a929e;
+
+  /* Accent bg */
+  --color-tint-blue: #eff6ff;
+  --color-tile: #f1f5f9;
+  --color-track: #f1f3f5;
+
+  /* Status — success */
+  --color-success: #16a34a;
+  --color-success-ink: #15803d;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #bbf7d0;
+
+  /* Status — warning */
+  --color-warning: #d97706;
+  --color-warning-ink: #b45309;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+
+  /* Status — danger */
+  --color-danger: #dc2626;
+  --color-danger-ink: #b91c1c;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+
+  /* Typography */
+  --font-sans:
+    'Inter', -apple-system, system-ui, sans-serif;
+
+  /* Radii */
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-tile: 10px;
+  --radius-pill: 999px;
+
+  /* Keyframes (handoff §Animations) */
+  --animate-fade-up: fadeUp 0.25s ease;
+  --animate-pop: pop 0.15s ease;
+  --animate-mic-ring: micRing 1.4s ease-out infinite;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes micRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes barPulse {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
