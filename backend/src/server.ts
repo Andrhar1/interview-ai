@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
+import { connectMongo } from './config/mongo.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 
@@ -23,6 +24,13 @@ app.use('/api/auth', authRouter);
 
 app.use(errorHandler);
 
-app.listen(env.PORT, () => {
-  console.log(`🚀 Backend listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
-});
+connectMongo()
+  .then(() => {
+    app.listen(env.PORT, () => {
+      console.log(`🚀 Backend listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+    });
+  })
+  .catch((err) => {
+    console.error('❌ Failed to connect to MongoDB:', err);
+    process.exit(1);
+  });
