@@ -26,3 +26,38 @@ export interface SessionSummary {
 export interface CreateSessionResponse {
   session: SessionSummary;
 }
+
+export interface EvaluationMetric {
+  key: string;
+  label: string;
+  score: number;
+  note?: string;
+}
+
+export interface Evaluation {
+  overall_score: number;
+  feedback_text?: string | null;
+  metrics: EvaluationMetric[];
+  strengths: string[];
+  improvements: string[];
+  summary?: string | null;
+}
+
+export interface TranscriptExchange {
+  role: 'ai' | 'user';
+  text: string;
+}
+
+/** GET /sessions/:id response. */
+export interface SessionDetailResponse {
+  session: SessionSummary & {
+    job_field_name: string;
+    job_field_slug: string;
+  };
+  evaluation: Evaluation | null;
+  transcript: { exchanges: unknown; summary: string | null } | null;
+}
+
+export interface AnalyzeResponse {
+  evaluation: Evaluation;
+}

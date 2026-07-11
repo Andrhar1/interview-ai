@@ -5,6 +5,7 @@ import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Session } from './pages/Session';
+import { Result } from './pages/Result';
 
 export function App() {
   return (
@@ -25,6 +26,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <Session />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/result/:id"
+          element={
+            <ProtectedRoute>
+              <Result />
             </ProtectedRoute>
           }
         />
