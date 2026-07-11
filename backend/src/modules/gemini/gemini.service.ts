@@ -1,5 +1,6 @@
 import { GoogleGenAI, Modality } from '@google/genai';
 import { env } from '../../config/env.js';
+import { AppError } from '../../middleware/errorHandler.js';
 
 /**
  * Shared GoogleGenAI client (singleton, constructed once at module scope —
@@ -52,29 +53,35 @@ Aturan wawancara:
 export async function createEphemeralToken(
   systemInstruction: string,
 ): Promise<{ token: string; model: string }> {
-  const created = await ai.authTokens.create({
-    config: {
-      uses: 1,
-      expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      newSessionExpireTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
-      liveConnectConstraints: {
-        model: env.GEMINI_MODEL,
-        config: {
-          temperature: 0.7,
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          speechConfig: { languageCode: 'id-ID' },
-          sessionResumption: {},
-          systemInstruction,
+  let created;
+  try {
+    created = await ai.authTokens.create({
+      config: {
+        uses: 1,
+        expireTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        newSessionExpireTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+        liveConnectConstraints: {
+          model: env.GEMINI_MODEL,
+          config: {
+            temperature: 0.7,
+            responseModalities: [Modality.AUDIO],
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
+            speechConfig: { languageCode: 'id-ID' },
+            sessionResumption: {},
+            systemInstruction,
+          },
         },
+        httpOptions: { apiVersion: 'v1alpha' },
       },
-      httpOptions: { apiVersion: 'v1alpha' },
-    },
-  });
+    });
+  } catch {
+    console.error('Gemini token mint failed');
+    throw new AppError(502, 'Gagal memulai sesi wawancara. Coba lagi.');
+  }
 
   if (!created.name) {
-    throw new Error('Gemini did not return an ephemeral token name.');
+    throw new AppError(502, 'Gagal memulai sesi wawancara. Coba lagi.');
   }
 
   return { token: created.name, model: env.GEMINI_MODEL };
