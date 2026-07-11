@@ -60,7 +60,8 @@ Dibangun bertahap per fase (lihat `docs/IMPLEMENTATION_PLAN.md`).
 
 - ✅ **Fase 0** — Setup & Fondasi (monorepo, design system, Landing)
 - ✅ **Fase 1** — Autentikasi (register/login/refresh/logout/me, JWT + argon2, rate limit; layar Login/Register, Navbar, dashboard placeholder)
-- ⏳ **Fase 2** — Core backend & DB (berikutnya)
+- ✅ **Fase 2** — Core backend & DB (migrasi job_fields/interview_sessions/evaluations + seed, koneksi MongoDB + transcripts, endpoint `GET /api/job-fields` & modul sessions dengan ownership + urutan tulis Mongo→Postgres; layar Dashboard konfigurasi sesi)
+- ⏳ **Fase 3** — Integrasi Gemini Live (berikutnya)
 
 ### Database (development)
 
@@ -76,3 +77,12 @@ Lalu jalankan migrasi:
 ```bash
 npm run migrate -w backend
 ```
+
+Fase 2 menambah MongoDB (koleksi `transcripts`). Untuk development pakai MongoDB lokal:
+
+```bash
+docker run -d --name interviewai-mongo -p 27017:27017 mongo:7
+# backend/.env → MONGODB_URI=mongodb://localhost:27017/interviewai
+```
+
+MongoDB Atlas menyusul di Fase 7 (deploy). Backend kini mewajibkan `MONGODB_URI`.
