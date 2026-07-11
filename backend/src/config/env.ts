@@ -3,8 +3,7 @@ import { z } from 'zod';
 
 /**
  * Environment validation. Vars required up to the current phase are mandatory;
- * later-phase vars (Mongo, Gemini, CV) stay optional until those phases wire
- * them up.
+ * later-phase vars (Gemini, CV) stay optional until those phases wire them up.
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -24,8 +23,10 @@ const envSchema = z.object({
   PG_USER: z.string().min(1),
   PG_PASSWORD: z.string().default(''),
 
+  // MongoDB (Fase 2+, required)
+  MONGODB_URI: z.string().min(1, 'MONGODB_URI must be set (Fase 2+)'),
+
   // Later phases (optional for now)
-  MONGODB_URI: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-live-2.5-flash-preview'),
   CV_MAX_SIZE_MB: z.coerce.number().default(5),
