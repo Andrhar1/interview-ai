@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
+import { buildSystemInstruction, createEphemeralToken } from '../gemini/gemini.service.js';
 import { createSessionSchema, endSessionSchema } from './sessions.schema.js';
 import {
   createSession,
   deleteSession,
   endSession,
   getSession,
+  getSessionForToken,
   listSessions,
 } from './sessions.service.js';
 
@@ -33,4 +35,16 @@ export async function end(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   await deleteSession(req.user!.sub, req.params.id);
   res.status(204).end();
+}
+
+export async function mintToken(req: Request, res: Response) {
+  const s = await getSessionForToken(req.user!.sub, req.params.id);
+  const systemInstruction = buildSystemInstruction({
+    jobFieldName: s.job_field_name,
+    jobTitle: s.job_title,
+    company: s.company,
+    jobDescription: s.job_description,
+  });
+  const { token, model } = await createEphemeralToken(systemInstruction);
+  res.json({ token, model });
 }

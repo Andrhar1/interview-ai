@@ -26,9 +26,11 @@ const envSchema = z.object({
   // MongoDB (Fase 2+, required)
   MONGODB_URI: z.string().min(1, 'MONGODB_URI must be set (Fase 2+)'),
 
-  // Later phases (optional for now)
-  GEMINI_API_KEY: z.string().optional(),
+  // Gemini (Fase 3+, required)
+  GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY must be set (Fase 3+)'),
   GEMINI_MODEL: z.string().default('gemini-live-2.5-flash-preview'),
+
+  // Later phases (optional for now)
   CV_MAX_SIZE_MB: z.coerce.number().default(5),
   CV_STORAGE_PATH: z.string().optional(),
 });

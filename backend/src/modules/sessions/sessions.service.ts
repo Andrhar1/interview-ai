@@ -257,6 +257,35 @@ export async function endSession(
   }
 }
 
+export interface SessionForToken {
+  id: string;
+  status: 'in_progress' | 'completed';
+  job_title: string | null;
+  company: string | null;
+  job_description: string | null;
+  job_field_name: string;
+}
+
+/** Loads a session (joined with its job field) for minting a Gemini ephemeral token. */
+export async function getSessionForToken(
+  userId: string,
+  sessionId: string,
+): Promise<SessionForToken> {
+  const { rows } = await query<SessionForToken>(
+    `SELECT s.id, s.status, s.job_title, s.company, s.job_description, f.name AS job_field_name
+     FROM interview_sessions s
+     JOIN job_fields f ON f.id = s.job_field_id
+     WHERE s.id = $1 AND s.user_id = $2`,
+    [sessionId, userId],
+  );
+  const row = rows[0];
+  if (!row) throw new AppError(404, 'Sesi tidak ditemukan.');
+  if (row.status === 'completed') {
+    throw new AppError(409, 'Sesi sudah selesai.');
+  }
+  return row;
+}
+
 export async function deleteSession(userId: string, sessionId: string): Promise<void> {
   const result = await query('DELETE FROM interview_sessions WHERE id = $1 AND user_id = $2', [
     sessionId,
