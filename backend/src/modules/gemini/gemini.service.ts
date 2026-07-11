@@ -123,14 +123,14 @@ const rawMetricSchema = z
   .object({
     key: z.string().optional(),
     label: z.string().optional(),
-    score: z.number().optional(),
+    score: z.coerce.number().optional(),
     note: z.string().optional(),
   })
   .passthrough();
 
 const rawEvaluationSchema = z
   .object({
-    overall_score: z.number().optional(),
+    overall_score: z.coerce.number().optional(),
     feedback_text: z.string().optional(),
     metrics: z.array(rawMetricSchema).optional(),
     strengths: z.array(z.string()).optional(),
@@ -207,7 +207,7 @@ function normalizeText(value: unknown, fallback: string): string {
  * scores, etc.) — only throws AppError(502) if the payload is unusable
  * (not even a JSON object).
  */
-function normalizeEvaluation(raw: unknown): Evaluation {
+export function normalizeEvaluation(raw: unknown): Evaluation {
   const parsed = rawEvaluationSchema.safeParse(raw);
   if (!parsed.success) {
     throw new AppError(502, 'Gagal menganalisis sesi. Coba lagi.');
