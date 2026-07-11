@@ -4,6 +4,7 @@ import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { Session } from './pages/Session';
 
 export function App() {
   return (
@@ -16,6 +17,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/session/:id"
+          element={
+            <ProtectedRoute>
+              <Session />
             </ProtectedRoute>
           }
         />
