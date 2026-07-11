@@ -31,7 +31,7 @@ export function TranscriptPanel({ messages, typing }: TranscriptPanelProps) {
         className="flex min-h-[280px] flex-1 flex-col gap-3 overflow-y-auto px-[18px] pb-2 pt-[18px]"
       >
         {messages.map((m, i) => (
-          <TranscriptBubble key={i} role={m.role} text={m.text} final={m.final} />
+          <TranscriptBubble key={i} role={m.role} text={m.text} />
         ))}
         {typing && (
           <div className="flex animate-fade-up items-center gap-[5px] self-start rounded-[4px_14px_14px_14px] bg-track px-4 py-[13px]">

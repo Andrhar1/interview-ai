@@ -36,11 +36,11 @@ export interface EvaluationMetric {
 
 export interface Evaluation {
   overall_score: number;
-  feedback_text?: string | null;
+  feedback_text?: string;
   metrics: EvaluationMetric[];
   strengths: string[];
   improvements: string[];
-  summary?: string | null;
+  summary?: string;
 }
 
 export interface TranscriptExchange {

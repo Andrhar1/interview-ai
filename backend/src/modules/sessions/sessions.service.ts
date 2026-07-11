@@ -297,11 +297,15 @@ export async function analyzeSession(
   sessionId: string,
   exchanges: AnalyzeInput['exchanges'],
 ): Promise<Evaluation> {
-  const { rows } = await query('SELECT 1 FROM interview_sessions WHERE id = $1 AND user_id = $2', [
-    sessionId,
-    userId,
-  ]);
-  if (!rows[0]) throw new AppError(404, 'Sesi tidak ditemukan.');
+  const { rows } = await query<{ status: 'in_progress' | 'completed' }>(
+    'SELECT status FROM interview_sessions WHERE id = $1 AND user_id = $2',
+    [sessionId, userId],
+  );
+  const row = rows[0];
+  if (!row) throw new AppError(404, 'Sesi tidak ditemukan.');
+  if (row.status === 'completed') {
+    throw new AppError(409, 'Sesi sudah selesai.');
+  }
 
   return generateEvaluation(exchanges);
 }

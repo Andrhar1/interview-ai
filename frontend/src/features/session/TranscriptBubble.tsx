@@ -5,7 +5,7 @@ import type { TranscriptBubbleData } from './types';
  * The design's third "Feedback" role is intentionally not rendered here —
  * see types.ts for why.
  */
-export function TranscriptBubble({ role, text }: TranscriptBubbleData) {
+export function TranscriptBubble({ role, text }: Pick<TranscriptBubbleData, 'role' | 'text'>) {
   if (role === 'ai') {
     return (
       <div className="flex max-w-[86%] animate-fade-up flex-col items-start self-start">
