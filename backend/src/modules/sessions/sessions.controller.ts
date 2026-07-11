@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { buildSystemInstruction, createEphemeralToken } from '../gemini/gemini.service.js';
-import { createSessionSchema, endSessionSchema } from './sessions.schema.js';
+import { analyzeSchema, createSessionSchema, endSessionSchema } from './sessions.schema.js';
 import {
+  analyzeSession,
   createSession,
   deleteSession,
   endSession,
@@ -35,6 +36,12 @@ export async function end(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   await deleteSession(req.user!.sub, req.params.id);
   res.status(204).end();
+}
+
+export async function analyze(req: Request, res: Response) {
+  const input = analyzeSchema.parse(req.body);
+  const evaluation = await analyzeSession(req.user!.sub, req.params.id, input.exchanges);
+  res.json({ evaluation });
 }
 
 export async function mintToken(req: Request, res: Response) {

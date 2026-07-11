@@ -29,6 +29,9 @@ const envSchema = z.object({
   // Gemini (Fase 3+, required)
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY must be set (Fase 3+)'),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash-native-audio-latest'),
+  // Text model for structured-output evaluation generation (Task 4). Must NOT
+  // be the live-audio model above.
+  GEMINI_ANALYSIS_MODEL: z.string().default('gemini-2.5-flash'),
 
   // Later phases (optional for now)
   CV_MAX_SIZE_MB: z.coerce.number().default(5),

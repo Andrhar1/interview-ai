@@ -43,5 +43,17 @@ export const endSessionSchema = z.object({
   evaluation: evaluationSchema,
 });
 
+export const analyzeSchema = z.object({
+  exchanges: z
+    .array(
+      z.object({
+        role: z.enum(['ai', 'user']),
+        text: z.string().min(1),
+      }),
+    )
+    .min(1),
+});
+
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;
 export type EndSessionInput = z.infer<typeof endSessionSchema>;
+export type AnalyzeInput = z.infer<typeof analyzeSchema>;

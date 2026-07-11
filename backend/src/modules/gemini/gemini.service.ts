@@ -1,4 +1,5 @@
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Modality, Type } from '@google/genai';
+import { z } from 'zod';
 import { env } from '../../config/env.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
@@ -85,4 +86,217 @@ export async function createEphemeralToken(
   }
 
   return { token: created.name, model: env.GEMINI_MODEL };
+}
+
+/** The 4 fixed evaluation metrics, in the required order — keys are stable slugs. */
+const METRIC_DEFS = [
+  { key: 'komunikasi', label: 'Komunikasi' },
+  { key: 'relevansi', label: 'Relevansi' },
+  { key: 'struktur', label: 'Struktur (STAR)' },
+  { key: 'kepercayaan_diri', label: 'Kepercayaan Diri' },
+] as const;
+
+export interface EvaluationMetric {
+  key: string;
+  label: string;
+  score: number;
+  note: string;
+}
+
+export interface Evaluation {
+  overall_score: number;
+  feedback_text: string;
+  metrics: EvaluationMetric[];
+  strengths: string[];
+  improvements: string[];
+  summary: string;
+}
+
+export interface EvaluationExchange {
+  role: 'ai' | 'user';
+  text: string;
+}
+
+/** Lenient shape for the raw Gemini JSON output — everything optional, since the
+ * model can drift. Normalization below fills in/clamps whatever is missing. */
+const rawMetricSchema = z
+  .object({
+    key: z.string().optional(),
+    label: z.string().optional(),
+    score: z.number().optional(),
+    note: z.string().optional(),
+  })
+  .passthrough();
+
+const rawEvaluationSchema = z
+  .object({
+    overall_score: z.number().optional(),
+    feedback_text: z.string().optional(),
+    metrics: z.array(rawMetricSchema).optional(),
+    strengths: z.array(z.string()).optional(),
+    improvements: z.array(z.string()).optional(),
+    summary: z.string().optional(),
+  })
+  .passthrough();
+
+/** Gemini structured-output schema requesting the fixed evaluation shape. */
+const evaluationResponseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    overall_score: {
+      type: Type.INTEGER,
+      description: 'Skor keseluruhan 0-100, kira-kira rata-rata tertimbang dari metrics.',
+    },
+    feedback_text: {
+      type: Type.STRING,
+      description: 'Umpan balik naratif ringkas dalam Bahasa Indonesia.',
+    },
+    metrics: {
+      type: Type.ARRAY,
+      description: 'Tepat 4 metrik: komunikasi, relevansi, struktur, kepercayaan_diri.',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          key: { type: Type.STRING },
+          label: { type: Type.STRING },
+          score: { type: Type.INTEGER },
+          note: { type: Type.STRING, description: 'Catatan satu kalimat.' },
+        },
+        required: ['key', 'label', 'score', 'note'],
+      },
+    },
+    strengths: {
+      type: Type.ARRAY,
+      description: '2-4 poin "yang sudah baik", dalam Bahasa Indonesia.',
+      items: { type: Type.STRING },
+    },
+    improvements: {
+      type: Type.ARRAY,
+      description: '2-4 poin "bisa ditingkatkan", dalam Bahasa Indonesia.',
+      items: { type: Type.STRING },
+    },
+    summary: {
+      type: Type.STRING,
+      description: 'Ringkasan naratif sesi dalam Bahasa Indonesia.',
+    },
+  },
+  required: ['overall_score', 'feedback_text', 'metrics', 'strengths', 'improvements', 'summary'],
+};
+
+function clampScore(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+  if (Array.isArray(value)) {
+    const filtered = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+    if (filtered.length > 0) return filtered;
+  }
+  return fallback;
+}
+
+function normalizeText(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+/**
+ * Validates + normalizes the raw Gemini JSON output into the fixed Evaluation
+ * shape. Never throws for minor drift (missing/renamed metric, missing
+ * scores, etc.) — only throws AppError(502) if the payload is unusable
+ * (not even a JSON object).
+ */
+function normalizeEvaluation(raw: unknown): Evaluation {
+  const parsed = rawEvaluationSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new AppError(502, 'Gagal menganalisis sesi. Coba lagi.');
+  }
+  const data = parsed.data;
+  const rawMetrics = data.metrics ?? [];
+
+  const metrics: EvaluationMetric[] = METRIC_DEFS.map((def) => {
+    const match = rawMetrics.find((m) => {
+      const key = typeof m.key === 'string' ? m.key.trim().toLowerCase() : '';
+      const label = typeof m.label === 'string' ? m.label.trim().toLowerCase() : '';
+      return key === def.key || label === def.label.toLowerCase();
+    });
+    return {
+      key: def.key,
+      label: def.label,
+      score: clampScore(match?.score, 50),
+      note: normalizeText(match?.note, ''),
+    };
+  });
+
+  const overallFallback = Math.round(
+    metrics.reduce((sum, m) => sum + m.score, 0) / metrics.length,
+  );
+
+  return {
+    overall_score: clampScore(data.overall_score, overallFallback),
+    feedback_text: normalizeText(
+      data.feedback_text,
+      'Evaluasi wawancara berhasil dibuat berdasarkan transkrip sesi.',
+    ),
+    metrics,
+    strengths: normalizeStringArray(data.strengths, [
+      'Kandidat menyelesaikan sesi wawancara ini.',
+    ]),
+    improvements: normalizeStringArray(data.improvements, [
+      'Perlu latihan lebih lanjut untuk meningkatkan performa wawancara.',
+    ]),
+    summary: normalizeText(data.summary, 'Sesi wawancara telah selesai dianalisis.'),
+  };
+}
+
+function buildAnalysisPrompt(exchanges: EvaluationExchange[]): string {
+  const transcript = exchanges
+    .map((e) => `${e.role === 'ai' ? 'Pewawancara' : 'Kandidat'}: ${e.text}`)
+    .join('\n');
+
+  return `Anda adalah asesor wawancara kerja profesional Indonesia. Evaluasi performa kandidat berdasarkan transkrip wawancara di bawah ini.
+
+Berikan penilaian dalam format JSON dengan:
+- overall_score: skor keseluruhan 0-100 (kira-kira rata-rata tertimbang dari ke-4 metrik).
+- metrics: TEPAT 4 metrik berikut, masing-masing dengan score 0-100 dan note (catatan satu kalimat), dalam urutan ini:
+  1. key="komunikasi", label="Komunikasi"
+  2. key="relevansi", label="Relevansi"
+  3. key="struktur", label="Struktur (STAR)"
+  4. key="kepercayaan_diri", label="Kepercayaan Diri"
+- strengths: 2-4 poin hal yang sudah baik dari kandidat.
+- improvements: 2-4 poin hal yang bisa ditingkatkan.
+- summary: ringkasan naratif singkat mengenai keseluruhan sesi.
+- feedback_text: umpan balik naratif ringkas untuk kandidat.
+
+Semua teks WAJIB menggunakan Bahasa Indonesia yang formal namun membangun.
+
+Transkrip wawancara:
+${transcript}`;
+}
+
+/**
+ * Sends the interview transcript to Gemini (text model, structured JSON
+ * output) and returns a validated, normalized Evaluation. Does not persist
+ * anything — the caller (sessions module) is responsible for that via /end.
+ */
+export async function generateEvaluation(exchanges: EvaluationExchange[]): Promise<Evaluation> {
+  let raw: unknown;
+  try {
+    const response = await ai.models.generateContent({
+      model: env.GEMINI_ANALYSIS_MODEL,
+      contents: buildAnalysisPrompt(exchanges),
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: evaluationResponseSchema,
+        temperature: 0.4,
+      },
+    });
+    raw = JSON.parse(response.text ?? '');
+  } catch {
+    console.error('Gemini evaluation generation failed');
+    throw new AppError(502, 'Gagal menganalisis sesi. Coba lagi.');
+  }
+
+  return normalizeEvaluation(raw);
 }
