@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { connectMongo } from './config/mongo.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import { jobFieldsRouter } from './modules/jobFields/jobFields.routes.js';
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/job-fields', jobFieldsRouter);
 // Further module routes (sessions, cv, ...) mounted in later phases.
 
 app.use(errorHandler);
