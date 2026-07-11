@@ -71,6 +71,7 @@ export function Session() {
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
 
+  const isMountedRef = useRef(true);
   const liveRef = useRef<LiveInterview | null>(null);
   const captureRef = useRef<MicCapture | null>(null);
   const playbackRef = useRef<AudioPlayback | null>(null);
@@ -110,6 +111,9 @@ export function Session() {
     if (liveRef.current) closes.push(liveRef.current.close());
     if (playbackRef.current) closes.push(playbackRef.current.close());
     await Promise.allSettled(closes);
+    liveRef.current = null;
+    playbackRef.current = null;
+    captureRef.current = null;
   }, []);
 
   const startMic = useCallback(() => {
@@ -217,6 +221,7 @@ export function Session() {
   useEffect(() => {
     if (!id) return;
     tornRef.current = false;
+    isMountedRef.current = true;
 
     playbackRef.current = createAudioPlayback();
     void connect();
@@ -241,6 +246,7 @@ export function Session() {
     window.addEventListener('beforeunload', onBeforeUnload);
 
     return () => {
+      isMountedRef.current = false;
       window.removeEventListener('beforeunload', onBeforeUnload);
       void teardown();
     };
@@ -287,16 +293,27 @@ export function Session() {
     setEnding(true);
     try {
       await teardown();
+      if (!isMountedRef.current) return;
 
       const exchanges: TranscriptExchange[] = transcript
         .filter((m) => m.text.trim().length > 0)
         .map((m) => ({ role: m.role, text: m.text }));
+
+      if (exchanges.length === 0) {
+        // Nothing to analyze — calling /analyze would 400 (min(1) exchanges)
+        // and land the user in an unrecoverable retry loop. Skip straight
+        // to the Dashboard instead.
+        navigate('/dashboard');
+        return;
+      }
+
       const duration_seconds = elapsedSeconds;
 
       const { evaluation } = await apiRequest<AnalyzeResponse>(`/sessions/${id}/analyze`, {
         method: 'POST',
         body: JSON.stringify({ exchanges }),
       });
+      if (!isMountedRef.current) return;
 
       await apiRequest(`/sessions/${id}/end`, {
         method: 'POST',
@@ -307,9 +324,11 @@ export function Session() {
           evaluation,
         }),
       });
+      if (!isMountedRef.current) return;
 
       navigate(`/result/${id}`, { state: { evaluation: evaluation as Evaluation } });
     } catch (err) {
+      if (!isMountedRef.current) return;
       setEnding(false);
       const message =
         err instanceof ApiError ? err.message : 'Gagal mengakhiri sesi. Coba lagi.';
