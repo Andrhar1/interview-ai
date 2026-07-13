@@ -146,9 +146,10 @@ export function Session() {
 
   // --- connect: creates a NEW live client. Called from the "Mulai Wawancara"
   // click handler, and from retry() only when no client was ever established
-  // (the very first connect failed). A mid-interview retry must go through
-  // LiveInterview.reconnect() instead, so the session-resumption handle and
-  // the "kickoff already sent" flag survive.
+  // (the very first connect failed — see the retry affordance on the
+  // full-connect overlay). A mid-interview retry must go through
+  // LiveInterview.reconnect() instead, so the client's session-resumption
+  // handle survives and the interview resumes instead of restarting.
   const connect = useCallback(async () => {
     if (!id) return;
     const myGen = ++connectGenRef.current;
@@ -301,11 +302,12 @@ export function Session() {
     }
   }
 
-  // Manual "Coba sekarang". Re-opens the EXISTING live client whenever we have
-  // one: that keeps its session-resumption handle and its "kickoff already
-  // sent" flag, so the interview resumes where it dropped instead of the AI
-  // greeting again and re-asking question 1. A fresh connect() is only correct
-  // when nothing was ever established (the very first connect failed).
+  // Manual retry. Re-opens the EXISTING live client whenever we have one: that
+  // keeps its session-resumption handle, so the interview resumes where it
+  // dropped instead of the AI greeting again and re-asking question 1. A fresh
+  // connect() is only correct when nothing was ever established — i.e. the very
+  // first connect failed, which is reachable from the full-connect overlay's
+  // "Coba lagi" button (liveRef is still null there).
   async function retry() {
     if (retryingRef.current) return;
     retryingRef.current = true;
@@ -437,12 +439,32 @@ export function Session() {
         <PreSessionCard fieldTitle={fieldTitle} context={context} onStart={handleStart} />
       ) : showFullConnectingOverlay ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-[18px] px-5 py-16">
-          <span className="h-[34px] w-[34px] animate-spin rounded-full border-[3px] border-[#e2e8f0] border-t-blue" />
-          <div className="text-center">
-            <div className="text-[15px] font-medium text-ink">Menghubungkan ke pewawancara AI…</div>
-            <div className="mt-1 text-[13px] text-ink-muted">Menyiapkan koneksi suara</div>
-          </div>
-          {connectError && <p className="max-w-sm text-center text-[13px] text-danger">{connectError}</p>}
+          {/* The FIRST connect failed: no live client exists, so there is no
+              reconnect overlay to fall back on. Without this button the user
+              would sit on a spinner forever and have to reload the page. */}
+          {connState === 'error' ? (
+            <>
+              <div className="text-center">
+                <div className="text-[15px] font-medium text-ink">Gagal terhubung</div>
+                <p className="mt-1 max-w-sm text-[13px] text-danger">
+                  {connectError ?? 'Gagal terhubung ke pewawancara AI. Coba lagi.'}
+                </p>
+              </div>
+              <Button variant="primary" onClick={() => void retry()} className="px-4 py-2 text-[13px]">
+                Coba lagi
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="h-[34px] w-[34px] animate-spin rounded-full border-[3px] border-[#e2e8f0] border-t-blue" />
+              <div className="text-center">
+                <div className="text-[15px] font-medium text-ink">
+                  Menghubungkan ke pewawancara AI…
+                </div>
+                <div className="mt-1 text-[13px] text-ink-muted">Menyiapkan koneksi suara</div>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-wrap items-stretch gap-6 p-6">
@@ -452,6 +474,7 @@ export function Session() {
               <ReconnectOverlay
                 state={connState as 'connecting' | 'reconnecting' | 'error'}
                 onRetry={retry}
+                detail={connectError}
               />
             )}
 
