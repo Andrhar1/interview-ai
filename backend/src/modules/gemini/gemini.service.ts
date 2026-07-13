@@ -51,6 +51,16 @@ Aturan wawancara:
  * instruction locked server-side via liveConnectConstraints, so the
  * long-lived GEMINI_API_KEY never leaves this server. Never log the
  * returned token or the API key.
+ *
+ * `lockAdditionalFields: []` is REQUIRED. With liveConnectConstraints set and
+ * lockAdditionalFields undefined, the API locks EVERY field of
+ * LiveConnectConfig — including the ones we do not set — so the client's
+ * `sessionResumption: { handle }` would be silently dropped and every
+ * reconnect would open a brand-new, empty session. With an empty array only
+ * the fields we actually set below are locked (model, systemInstruction,
+ * voice, temperature, modalities, transcription — the security-relevant ones),
+ * leaving sessionResumption client-settable. That is the ONLY field the client
+ * may supply; it carries no persona/voice/model override.
  */
 export async function createEphemeralToken(
   systemInstruction: string,
@@ -73,10 +83,11 @@ export async function createEphemeralToken(
               languageCode: 'id-ID',
               voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
             },
-            sessionResumption: {},
             systemInstruction,
           },
         },
+        // Lock only the fields set above; sessionResumption stays client-settable.
+        lockAdditionalFields: [],
         httpOptions: { apiVersion: 'v1alpha' },
       },
     });

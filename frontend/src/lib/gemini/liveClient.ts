@@ -63,8 +63,26 @@ function backoffDelay(attempt: number): number {
   return Math.min(BACKOFF_BASE_MS * 2 ** (attempt - 1), BACKOFF_MAX_MS);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * A sleep that can be cut short. Returns the promise plus a `cancel` that
+ * resolves it immediately — used so a manual retry during a reconnect backoff
+ * fires the pending attempt now instead of leaving the button dead for up to
+ * 4 seconds.
+ */
+function cancellableSleep(ms: number): { promise: Promise<void>; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let done: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    done = resolve;
+    timer = setTimeout(resolve, ms);
+  });
+  return {
+    promise,
+    cancel: () => {
+      if (timer !== undefined) clearTimeout(timer);
+      done?.();
+    },
+  };
 }
 
 export async function createLiveInterview(
@@ -81,6 +99,9 @@ export async function createLiveInterview(
   // Guards against onerror + onclose both firing for the same drop and
   // scheduling two concurrent reconnect attempts.
   let reconnectInFlight = false;
+  // Set while an auto-reconnect is waiting out its backoff; calling it makes
+  // that pending attempt fire immediately (manual "Coba sekarang").
+  let pendingBackoff: (() => void) | null = null;
   // Monotonic id: each connection attempt bumps it so callbacks from a
   // superseded (stale/failed) socket are ignored.
   let activeGen = 0;
@@ -96,18 +117,22 @@ export async function createLiveInterview(
   // latch. Both are reset at the top of every openConnection.
   let kickoffDelivered = false;
   let kickoffAttempts = 0;
-  // Has a kickoff ever landed in THIS interview? A resumption handle only
-  // represents real history once the model has been given something to respond
-  // to: the server can hand out a handle as soon as a session is established,
-  // so if the kickoff send threw (see sendKickoff) and the socket then dropped,
-  // that handle points at an EMPTY session. Resuming it would restore nothing
-  // and — having a handle — skip the kickoff, leaving the AI silent forever.
-  let kickoffEverDelivered = false;
+  // Has the MODEL ever produced output in this interview? This — not "did our
+  // kickoff send return without throwing" — is what proves a resumption handle
+  // points at a session with real conversation history.
+  //
+  // sendClientContent on an open-but-dying socket can buffer the frame and
+  // return normally, so a successful local send proves nothing about what the
+  // server received. If we treated that as history and a handle had already
+  // arrived, a later reconnect would resume a session that never got the
+  // kickoff: no history to restore, and — having a handle — no kickoff either.
+  // The AI would stay silent forever. Server output is the only honest signal.
+  let modelHasSpoken = false;
 
-  // The handle to (re)open with: only a handle from a session that actually
-  // received the kickoff carries conversation history.
+  // The handle to (re)open with: only a handle from a session the model has
+  // actually spoken in carries conversation history.
   function historyHandle(): string | undefined {
-    return kickoffEverDelivered ? resumptionHandle : undefined;
+    return modelHasSpoken ? resumptionHandle : undefined;
   }
 
   function setState(next: ConnState): void {
@@ -119,15 +144,20 @@ export async function createLiveInterview(
   // Model output audio, read from `msg.data` (the SDK's built-in accessor)
   // with a fallback to `inlineData.data`. Deliberately NOT filtered by
   // mimeType: filtering would silently drop all audio if a model ever omits
-  // the mimeType.
-  function emitAudio(msg: LiveServerMessage): void {
+  // the mimeType. Returns true if any audio was emitted.
+  function emitAudio(msg: LiveServerMessage): boolean {
     if (msg.data) {
       handlers.onAudioChunk(msg.data);
-      return;
+      return true;
     }
+    let emitted = false;
     for (const part of msg.serverContent?.modelTurn?.parts ?? []) {
-      if (part.inlineData?.data) handlers.onAudioChunk(part.inlineData.data);
+      if (part.inlineData?.data) {
+        handlers.onAudioChunk(part.inlineData.data);
+        emitted = true;
+      }
     }
+    return emitted;
   }
 
   function handleMessage(msg: LiveServerMessage): void {
@@ -135,13 +165,17 @@ export async function createLiveInterview(
       resumptionHandle = msg.sessionResumptionUpdate.newHandle;
     }
 
-    emitAudio(msg);
+    // First server output = this session provably has conversation history.
+    if (emitAudio(msg)) modelHasSpoken = true;
 
     const sc = msg.serverContent;
     if (!sc) return;
 
     if (sc.inputTranscription?.text) handlers.onInputTranscript(sc.inputTranscription.text);
-    if (sc.outputTranscription?.text) handlers.onOutputTranscript(sc.outputTranscription.text);
+    if (sc.outputTranscription?.text) {
+      modelHasSpoken = true;
+      handlers.onOutputTranscript(sc.outputTranscription.text);
+    }
 
     // Barge-in first so playback is cleared before the turn is marked done.
     if (sc.interrupted) handlers.onInterrupted();
@@ -163,8 +197,9 @@ export async function createLiveInterview(
         turns: [{ role: 'user', parts: [{ text: KICKOFF_PROMPT }] }],
         turnComplete: true,
       });
+      // Only records that the local send did not throw, so we don't send it
+      // twice. It does NOT mean the server received it — see modelHasSpoken.
       kickoffDelivered = true;
-      kickoffEverDelivered = true;
     } catch (e) {
       kickoffAttempts += 1;
       if (kickoffAttempts >= MAX_KICKOFF_ATTEMPTS) {
@@ -199,7 +234,10 @@ export async function createLiveInterview(
     reconnectInFlight = true;
     reconnectAttempts += 1;
     setState('reconnecting');
-    await sleep(backoffDelay(reconnectAttempts));
+    const backoff = cancellableSleep(backoffDelay(reconnectAttempts));
+    pendingBackoff = backoff.cancel;
+    await backoff.promise;
+    pendingBackoff = null;
     if (closing) {
       reconnectInFlight = false;
       return;
@@ -231,9 +269,15 @@ export async function createLiveInterview(
 
     const ai = new GoogleGenAI({ apiKey: token, httpOptions: { apiVersion: API_VERSION } });
 
-    // The persona/model config is locked into the token server-side; we only
-    // supply a resumption handle when reconnecting.
-    const config: LiveConnectConfig = handle ? { sessionResumption: { handle } } : {};
+    // The persona/model/voice config is locked into the token server-side (the
+    // token is minted with lockAdditionalFields: [], so sessionResumption is
+    // the ONE field we are allowed to set). Always send it: on a brand-new
+    // session `{}` is what asks the server to START issuing resumption
+    // handles, and a resumed session needs it too — otherwise it would never
+    // be handed a fresh handle and a SECOND drop would have nothing to resume.
+    const config: LiveConnectConfig = {
+      sessionResumption: handle ? { handle } : {},
+    };
 
     const next = await ai.live.connect({
       model,
@@ -287,7 +331,15 @@ export async function createLiveInterview(
   // handle, which both continues the conversation and (per the invariant in
   // openConnection) suppresses a second greeting.
   async function reconnect(): Promise<void> {
-    if (closing || reconnectInFlight) return;
+    if (closing) return;
+    // An auto-reconnect is already scheduled or under way. Starting a second
+    // one would race two sockets, so instead we collapse the remaining backoff
+    // (0.5–4s) and let the pending attempt fire NOW — otherwise the button
+    // would be visibly dead for the whole wait.
+    if (reconnectInFlight) {
+      pendingBackoff?.();
+      return;
+    }
     reconnectInFlight = true;
     reconnectAttempts = 0;
     setState('reconnecting');
@@ -317,8 +369,11 @@ export async function createLiveInterview(
   async function close(): Promise<void> {
     if (closing) return; // idempotent
     closing = true;
-    // Invalidate any in-flight attempt and pending reconnect callbacks.
+    // Invalidate any in-flight attempt and pending reconnect callbacks. Also
+    // release a backoff that is still sleeping, so it wakes, sees `closing`
+    // and unwinds instead of holding a timer past teardown.
     activeGen += 1;
+    pendingBackoff?.();
     try {
       session?.close();
     } catch {
