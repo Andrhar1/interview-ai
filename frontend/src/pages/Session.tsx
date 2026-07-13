@@ -105,9 +105,27 @@ interface PendingUserTurn {
 
 const DEBOUNCE_MS = 1200; // no new inputTranscript delta for this long ⇒ settle the buffer
 const THINKING_TIMEOUT_MS = 10000; // give up on 'AI sedang berpikir…' and fall back to 'idle'
-// Measured: inputTranscription runs ~3s behind the speaker. A delta arriving
-// less than this after a new turn's rising edge was spoken BEFORE that edge.
-const ASR_LAG_MS = 3000;
+// Measured: inputTranscription runs ~3s behind the speaker, but the drain
+// after they STOP talking can run up to ~8.4s. Raised well past the ~3s base
+// lag to also cover a barge-in landing near the worst end of that range: the
+// AI typically replies ~1.5s after the user stops, so if a new turn's rising
+// edge follows only a couple of seconds after that, the previous turn's last
+// words can still be in flight when the window used to close. When that
+// happens those words land in the NEW turn — which sits after the AI's
+// bubble — a genuine cross-speaker reorder, not merely an "approximate split
+// point" between two same-role bubbles. Raising this constant narrows that
+// window at the cost of the opposite mistake: a genuinely NEW, short
+// utterance arriving within ASR_LAG_MS of the previous rising edge gets
+// mis-attributed backward into the old turn instead of starting its own.
+// Given natural question/answer pacing (the AI's own question consumes
+// several seconds before the user starts a new answer), the reorder case is
+// judged both more likely and more damaging — it swaps who-said-what-when,
+// which is exactly the failure this whole turn-buffering design exists to
+// prevent — so this constant is biased toward the measured drain figure
+// rather than the base lag. It cannot be eliminated this way: Gemini gives
+// no per-delta "spoken at" timestamp, only an ARRIVAL time, so any fixed
+// window is a heuristic, not a guarantee.
+const ASR_LAG_MS = 6000;
 // "Akhiri Sesi": no new delta for this long ⇒ ASR is done. Must be >= DEBOUNCE_MS:
 // mid-session we need 1.2s of ASR quiet to call a turn settled, so accepting less
 // at the highest-stakes moment would cut a still-draining sentence in half.
@@ -117,6 +135,9 @@ const DRAIN_IDLE_MS = DEBOUNCE_MS;
 // beats a truncated answer in the evaluation.
 const DRAIN_MAX_MS = 9000;
 const DRAIN_POLL_MS = 100;
+// Hard cap on the spoken-turn chain (see trimTurnChain) — a safety net
+// independent of ASR_LAG_MS timing.
+const MAX_TURN_CHAIN = 8;
 
 /** ASR deltas are raw and may split mid-word — normalize the WHOLE turn, once. */
 function normalizeSpeech(raw: string): string {
@@ -188,7 +209,6 @@ export function Session() {
   const timerIntervalRef = useRef<number | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const tornRef = useRef(false);
-  const micStateRef = useRef<MicState>('disabled');
   const retryingRef = useRef(false);
   // Head of the spoken-turn chain: the most recent user turn, linked back to
   // the ones before it (which may still be draining). Each turn carries its own
@@ -200,8 +220,9 @@ export function Session() {
   // Debounce timer: flush the pending turns after ~1.2s with no new
   // inputTranscript delta (brief's rule (b) for "turn is over").
   const debounceTimerRef = useRef<number | null>(null);
-  // Mirrors the local-speech-detection boolean (see below) for the same
-  // stale-closure reason as micStateRef.
+  // Mirrors the local-speech-detection boolean (see below): a ref, not just
+  // state, because it's read from handlers created once inside connect()
+  // (closed over stale state otherwise) and needs a synchronous read.
   const isUserSpeakingRef = useRef(false);
   // 'AI sedang berpikir…' escape hatch (see the effect below).
   const thinkingTimerRef = useRef<number | null>(null);
@@ -218,10 +239,6 @@ export function Session() {
   // where the effect's cleanup can otherwise run before the first
   // createLiveInterview() promise settles and liveRef gets populated.
   const connectGenRef = useRef(0);
-
-  useEffect(() => {
-    micStateRef.current = micState;
-  }, [micState]);
 
   // The ONLY way the transcript is mutated. Keeps transcriptRef and the React
   // state in lockstep, and — unlike a bare setTranscript updater — runs the
@@ -288,9 +305,23 @@ export function Session() {
    * it, so nothing below it in the chain is reachable — and callers only trim
    * right after a flush, so those turns are clean too. Cut them loose, or the
    * chain (and the walk over it on every flush) grows for the whole session.
+   *
+   * The time-based cut alone is not sufficient: if rising edges keep landing
+   * less than ASR_LAG_MS apart for a while (choppy detector triggers, a
+   * hesitant speaker restarting often), `head` never ages past the window and
+   * nothing gets trimmed — the chain grows for as long as that keeps up, and
+   * flushPendingUser() walks the whole thing on every AI audio chunk. The hard
+   * cap below bounds it regardless of timing.
    */
   const trimTurnChain = useCallback((head: PendingUserTurn | null, now: number) => {
-    if (head && now - head.startedAt >= ASR_LAG_MS) head.prev = null;
+    if (!head) return;
+    if (now - head.startedAt >= ASR_LAG_MS) {
+      head.prev = null;
+      return;
+    }
+    let t = head;
+    for (let i = 0; i < MAX_TURN_CHAIN && t.prev; i++) t = t.prev;
+    if (t.prev) t.prev = null;
   }, []);
 
   /**
@@ -396,16 +427,21 @@ export function Session() {
   }, [isUserSpeaking, flushPendingUser, trimTurnChain]);
 
   // 'thinking' is entered when the user goes quiet, and only an AI delta
-  // leaves it. If the AI never replies (dropped turn, a cough the model has
-  // nothing to say about, an error), the badge would read "AI sedang
-  // berpikir…" forever — so time it out back to 'idle'. The timer is cancelled
-  // by this effect's own cleanup on every state change and on unmount, and by
-  // teardown().
+  // leaves it (turnComplete/interrupted, or a new AI delta). 'ai' is entered
+  // by the AI actually replying and is meant to be left the same way. Both
+  // rely on a server event that can simply never arrive (dropped turn, a
+  // cough the model has nothing to say about, a lost turnComplete/interrupted
+  // message) — 'ai' has no OTHER escape hatch (unlike 'thinking', nothing
+  // else rescues it), so a lost event would pin "AI sedang berbicara" on
+  // screen for the rest of the session. Time both out back to 'idle'. The
+  // timer is cancelled by this effect's own cleanup on every state change
+  // and on unmount, and by teardown().
   useEffect(() => {
-    if (speaker !== 'thinking') return;
+    if (speaker !== 'thinking' && speaker !== 'ai') return;
+    const from = speaker;
     const timer = window.setTimeout(() => {
       thinkingTimerRef.current = null;
-      setSpeaker((prev) => (prev === 'thinking' ? 'idle' : prev));
+      setSpeaker((prev) => (prev === from ? 'idle' : prev));
     }, THINKING_TIMEOUT_MS);
     thinkingTimerRef.current = timer;
     return () => {
@@ -415,9 +451,10 @@ export function Session() {
   }, [speaker]);
 
   // --- teardown: stop capture, close live socket, close playback, clear every
-  // timer (elapsed clock, transcript debounce, 'thinking' timeout, and the
-  // "Akhiri Sesi" drain window — which is also an exit path, so it must be
-  // released here or an unmount mid-drain would hang confirmEnd on it).
+  // timer (elapsed clock, transcript debounce, the 'thinking'/'ai' speaker
+  // escape hatch, and the "Akhiri Sesi" drain window — which is also an exit
+  // path, so it must be released here or an unmount mid-drain would hang
+  // confirmEnd on it).
   // Idempotent — safe to call from unmount, beforeunload, and the end flow.
   const teardown = useCallback(async () => {
     connectGenRef.current += 1; // invalidate any in-flight connect()
@@ -600,10 +637,22 @@ export function Session() {
           debounceTimerRef.current = window.setTimeout(() => {
             debounceTimerRef.current = null;
             flushPendingUser();
-            // ASR has gone quiet ⇒ the turn is over. A detector-driven turn is
-            // ended by the next rising edge; a synthetic one has no such edge.
+            // ASR has gone quiet for DEBOUNCE_MS ⇒ this turn is provably over,
+            // UNLESS the user is still talking right now: that is the
+            // mid-sentence-ASR-stall case (ASR lags/drops out while speech is
+            // ongoing), and closing there would let a later delta of the SAME
+            // answer be misrouted into a brand-new turn. A synthetic turn has
+            // no rising edge to close it at all, so it always closes here once
+            // ASR is quiet — the OR below covers both: a detector turn closes
+            // when the local signal agrees nobody is talking; a synthetic turn
+            // closes unconditionally. Without this, a detector-driven turn
+            // could never close on its own (the guard in onInputTranscript
+            // only opens a new turn when `head.closed`), so a SECOND, quieter
+            // answer that the local detector never trips for (RMS under the
+            // start threshold) would merge into the stale head instead of
+            // getting its own bubble — landing ABOVE the question it answers.
             const open = pendingTurnRef.current;
-            if (open?.synthetic) open.closed = true;
+            if (open && (open.synthetic || !isUserSpeakingRef.current)) open.closed = true;
           }, DEBOUNCE_MS);
         },
         onOutputTranscript: (delta) => {
@@ -826,9 +875,28 @@ export function Session() {
       // spoken.
       flushPendingUser();
 
+      // Natural speech is full of pauses, and a >600ms one mid-answer (the
+      // local detector's RELEASE_MS) or a stray ASR stall closes the turn
+      // early (see the debounce callback above), splitting ONE spoken answer
+      // into several adjacent `user` bubbles. Coalescing consecutive
+      // same-role entries here — exchanges only, the on-screen bubbles are
+      // untouched — turns that back into a single exchange before /analyze
+      // ever sees it, which is what "one answer" should look like to the
+      // evaluator. It also makes any residual boundary-drift between two
+      // adjacent same-role bubbles (see ASR_LAG_MS above) harmless: content
+      // and order are unchanged, only where a shared boundary fell.
       const exchanges: TranscriptExchange[] = transcriptRef.current
         .filter((m) => m.text.trim().length > 0)
-        .map((m) => ({ role: m.role, text: m.text }));
+        .reduce<TranscriptExchange[]>((acc, m) => {
+          const text = m.text.replace(/\s+/g, ' ').trim();
+          const last = acc[acc.length - 1];
+          if (last && last.role === m.role) {
+            last.text = `${last.text} ${text}`.replace(/\s+/g, ' ').trim();
+          } else {
+            acc.push({ role: m.role, text });
+          }
+          return acc;
+        }, []);
 
       if (exchanges.length === 0) {
         // Nothing to analyze — calling /analyze would 400 (min(1) exchanges)
