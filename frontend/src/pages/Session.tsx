@@ -337,14 +337,23 @@ export function Session() {
   }, []);
 
   /**
-   * "Akhiri Sesi" drain window. The mic is already stopped by the caller, so
-   * the user's speech is over — but Gemini's ASR is still ~3s behind it and
-   * keeps emitting `inputTranscription` for seconds. Closing the socket right
-   * away (what we used to do) simply lost the user's final sentence from the
-   * evaluation. So: keep the socket open and keep collecting deltas until the
-   * ASR goes quiet for 800ms, or 3s pass — whichever comes first. The
+   * "Akhiri Sesi" drain window. Gemini's ASR runs ~3s behind the speaker and
+   * keeps emitting `inputTranscription` for seconds after they stop, so closing
+   * the socket the instant the user confirms (what we used to do) simply lost
+   * their final sentence from the evaluation. Instead: keep collecting deltas
+   * until the ASR goes quiet for 800ms, or 3s pass — whichever comes first. The
    * "Menganalisis jawaban Anda…" spinner is already on screen, so the wait is
    * invisible.
+   *
+   * THE MIC MUST KEEP STREAMING FOR THE WHOLE WINDOW. This is the same trap as
+   * gating sendAudio: probe-vad-report.md ("Starving the VAD") measured that
+   * when the client stops sending packets, Gemini's server-side VAD starves —
+   * it never decides the user's turn ended, so it never fires turnComplete and
+   * never finalizes. A real mic keeps streaming ambient near-silence, and that
+   * continuing stream is what ends the turn. Stopping capture before the drain
+   * would therefore freeze the very ASR we are waiting on: the window would
+   * burn its 3s and collect nothing. Capture is stopped by teardown(), AFTER
+   * this resolves.
    *
    * NOT a guarantee: the measured drain can reach 8.4s, so the hard cap still
    * truncates the worst cases. It is a mitigation.
@@ -622,12 +631,17 @@ export function Session() {
     setEndError(null);
     setEnding(true);
     try {
-      // Order matters. Stop the MIC first — the user's speech is over, and
-      // ending the input stream is what lets Gemini's ASR finalize — but keep
-      // the socket open and keep collecting inputTranscription for a moment,
-      // or every word still in flight (the ASR runs ~3s behind) is simply lost
-      // from the evaluation. Only then tear the session down.
-      captureRef.current?.stop();
+      // Order matters. Keep BOTH the mic and the socket running through the
+      // drain window: the words the user just said are still ~3s back in
+      // Gemini's ASR, and it is the continuing audio stream (ambient silence
+      // included) that makes the server VAD end their turn and finalize —
+      // stopping capture first would starve it and collect nothing. teardown()
+      // then closes mic + socket + playback together, once the drain is done.
+      //
+      // The mic is therefore hot for up to 3s after the user confirms. They are
+      // on the "Menganalisis jawaban Anda…" spinner, and `ending` has already
+      // detached the local speech detector — so no new user turn can be opened;
+      // any late delta merges into the turn they already spoke (flushPendingUser).
       await drainInputTranscript();
       if (!isMountedRef.current) return;
 
