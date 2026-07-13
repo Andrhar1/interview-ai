@@ -13,10 +13,22 @@ Dua keluhan dari uji manual sesi wawancara live:
 
 ## Akar masalah
 
-### Bug A — chunk audio dibuang diam-diam
+### Bug A — chunk audio dibuang diam-diam — **TIDAK TERBUKTI**
 
-`frontend/src/lib/gemini/liveClient.ts` hanya meneruskan chunk audio bila
-`part.inlineData.mimeType` diawali `audio/pcm`:
+> **Revisi 2026-07-13 (setelah probe sesi Live sungguhan).** Hipotesis awal
+> ditolak oleh bukti. Probe terhadap `gemini-2.5-flash-native-audio-latest`
+> menghasilkan 265 chunk audio, dan **seluruhnya** membawa
+> `mimeType: 'audio/pcm;rate=24000'` (`partsWithoutMime: 0`). Kondisi lama
+> karena itu meloloskan semua chunk — ia bukan penyebab AI diam.
+>
+> Perubahan pemetaan audio tetap dikerjakan, tetapi statusnya turun menjadi
+> **hardening**, bukan perbaikan bug: membaca `msg.data` (accessor resmi SDK)
+> dengan fallback ke `inlineData.data`, dan sengaja tidak menyaring berdasarkan
+> `mimeType` — sebab bila suatu saat ada model yang tidak mengirim `mimeType`,
+> filter lama akan membuang seluruh audio tanpa error maupun log.
+
+Hipotesis awal (dipertahankan sebagai catatan): `frontend/src/lib/gemini/liveClient.ts`
+hanya meneruskan chunk audio bila `part.inlineData.mimeType` diawali `audio/pcm`:
 
 ```ts
 if (inline?.data && inline.mimeType?.startsWith('audio/pcm')) {
@@ -24,15 +36,15 @@ if (inline?.data && inline.mimeType?.startsWith('audio/pcm')) {
 }
 ```
 
-Bila model native-audio mengirim `inlineData.data` tanpa `mimeType`, chunk
-di-drop tanpa error maupun log. Dokumentasi Live API terkini menunjukkan SDK
-mengekspos audio langsung sebagai `message.data` — jalur yang lebih andal.
-
-### Bug B — tidak ada pemicu giliran pertama
+### Bug B — tidak ada pemicu giliran pertama — **PENYEBAB TUNGGAL, TERKONFIRMASI**
 
 Gemini Live tidak bicara sampai menerima input. Saat sesi terhubung, aplikasi
 tidak mengirim apa pun, sehingga model menunggu tanpa batas. (Verifikasi Task 3
 dahulu berhasil justru karena mengirim text turn secara manual.)
+
+Probe membuktikan ini secara langsung: begitu satu kickoff turn dikirim, model
+langsung menghasilkan sapaan + pertanyaan pertama dalam Bahasa Indonesia beserta
+265 chunk audio. Tanpa kickoff, tidak ada satu pun pesan yang datang.
 
 ### Bug C — audio berpotensi diblokir autoplay policy
 
