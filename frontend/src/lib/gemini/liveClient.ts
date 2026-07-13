@@ -40,6 +40,8 @@ export interface LiveInterview {
 
 const API_VERSION = 'v1alpha';
 const INPUT_AUDIO_MIME = 'audio/pcm;rate=16000';
+const KICKOFF_PROMPT =
+  'Mulai wawancara sekarang. Sapa kandidat dengan singkat, lalu langsung ajukan pertanyaan pertama.';
 const MAX_RECONNECT_ATTEMPTS = 3;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 4000;
@@ -73,6 +75,11 @@ export async function createLiveInterview(
   // Monotonic id: each connection attempt bumps it so callbacks from a
   // superseded (stale/failed) socket are ignored.
   let activeGen = 0;
+  // Gemini Live tidak bicara sampai menerima input. Satu giliran pemicu ini
+  // membuat pewawancara menyapa + mengajukan pertanyaan pertama sendiri.
+  // Teks pemicu TIDAK pernah masuk ke transkrip UI/DB: ia dikirim sebagai text
+  // turn, sedangkan transkrip pengguna hanya berasal dari inputAudioTranscription.
+  let kickoffSent = false;
 
   function setState(next: ConnState): void {
     if (state === next) return;
@@ -80,10 +87,26 @@ export async function createLiveInterview(
     handlers.onStateChange(next);
   }
 
+  // Audio keluaran model. Diambil dari `msg.data` (accessor bawaan SDK) dengan
+  // fallback ke `inlineData.data`. Sengaja TIDAK disaring berdasarkan mimeType:
+  // menyaringnya akan membuang seluruh audio diam-diam bila suatu model tidak
+  // mengirim mimeType.
+  function emitAudio(msg: LiveServerMessage): void {
+    if (msg.data) {
+      handlers.onAudioChunk(msg.data);
+      return;
+    }
+    for (const part of msg.serverContent?.modelTurn?.parts ?? []) {
+      if (part.inlineData?.data) handlers.onAudioChunk(part.inlineData.data);
+    }
+  }
+
   function handleMessage(msg: LiveServerMessage): void {
     if (msg.sessionResumptionUpdate?.newHandle) {
       resumptionHandle = msg.sessionResumptionUpdate.newHandle;
     }
+
+    emitAudio(msg);
 
     const sc = msg.serverContent;
     if (!sc) return;
@@ -91,16 +114,25 @@ export async function createLiveInterview(
     if (sc.inputTranscription?.text) handlers.onInputTranscript(sc.inputTranscription.text);
     if (sc.outputTranscription?.text) handlers.onOutputTranscript(sc.outputTranscription.text);
 
-    for (const part of sc.modelTurn?.parts ?? []) {
-      const inline = part.inlineData;
-      if (inline?.data && inline.mimeType?.startsWith('audio/pcm')) {
-        handlers.onAudioChunk(inline.data);
-      }
-    }
-
     // Barge-in first so playback is cleared before the turn is marked done.
     if (sc.interrupted) handlers.onInterrupted();
     if (sc.turnComplete) handlers.onTurnComplete();
+  }
+
+  // Hanya untuk koneksi PERTAMA. Saat reconnect (session resumption) riwayat
+  // sudah dipulihkan, jadi mengirim ulang pemicu akan membuat AI mengulang
+  // sapaannya di tengah sesi.
+  function sendKickoff(s: Session): void {
+    if (kickoffSent || closing) return;
+    kickoffSent = true;
+    try {
+      s.sendClientContent({
+        turns: [{ role: 'user', parts: [{ text: KICKOFF_PROMPT }] }],
+        turnComplete: true,
+      });
+    } catch (e) {
+      handlers.onError(toError(e));
+    }
   }
 
   // Called on an unexpected onerror/onclose. Never fires after close(). Both
@@ -185,6 +217,7 @@ export async function createLiveInterview(
       return;
     }
     session = next;
+    sendKickoff(next);
   }
 
   async function close(): Promise<void> {
