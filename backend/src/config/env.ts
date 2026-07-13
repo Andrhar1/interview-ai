@@ -28,7 +28,11 @@ const envSchema = z.object({
 
   // Gemini (Fase 3+, required)
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY must be set (Fase 3+)'),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash-native-audio-latest'),
+  // Live (audio) model. Measured time-to-first-audio after a user turn:
+  // gemini-3.1-flash-live-preview ~1.5s vs gemini-2.5-flash-native-audio-latest ~5.0s.
+  // Preview model — if Google retires it, fall back to the 2.5 native-audio model
+  // (proven to open with our token config; costs ~3.5s of extra latency).
+  GEMINI_MODEL: z.string().default('gemini-3.1-flash-live-preview'),
   // Text model for structured-output evaluation generation (Task 4). Must NOT
   // be the live-audio model above.
   GEMINI_ANALYSIS_MODEL: z.string().default('gemini-2.5-flash'),
