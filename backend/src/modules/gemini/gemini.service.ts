@@ -30,6 +30,8 @@ export function buildSystemInstruction(input: BuildSystemInstructionInput): stri
   if (input.company) context.push(`Perusahaan: ${input.company}`);
   if (input.jobDescription) context.push(`Deskripsi pekerjaan: ${input.jobDescription}`);
 
+  // TODO(Fase 4): inject {CV_CONTEXT} (the candidate's CV summary) into the
+  // "Konteks wawancara" block once the CV module exists.
   return `Anda adalah pewawancara HR profesional Indonesia yang ramah namun formal, sedang melakukan simulasi wawancara kerja.
 
 Konteks wawancara:
@@ -41,9 +43,7 @@ Aturan wawancara:
 - Setelah setiap jawaban kandidat, berikan umpan balik singkat (2-3 kalimat) sebelum melanjutkan ke pertanyaan berikutnya.
 - Tutup wawancara setelah 5-7 pertanyaan, lalu berikan ringkasan penutup yang singkat dan konstruktif.
 - Gunakan Bahasa Indonesia yang formal namun ramah sepanjang sesi.
-- Sesuaikan pertanyaan dengan bidang pekerjaan dan konteks di atas.
-
-// TODO(Fase 4): inject {CV_CONTEXT} — ringkasan CV kandidat — begitu modul CV tersedia.`;
+- Sesuaikan pertanyaan dengan bidang pekerjaan dan konteks di atas.`;
 }
 
 /**

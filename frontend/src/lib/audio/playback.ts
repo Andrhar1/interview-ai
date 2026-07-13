@@ -32,9 +32,9 @@ export function createAudioPlayback(): AudioPlayback {
   let nextStartTime = 0;
   const liveSources = new Set<AudioBufferSourceNode>();
 
-  // Lazily create the AudioContext (and its AnalyserNode) on first use, per
-  // autoplay policy — Task 5 triggers the first enqueue() from a user
-  // gesture, which is also when we resume() the context.
+  // Lazily create the AudioContext (and its AnalyserNode) on first use. It
+  // starts suspended under autoplay policy; resume() (called from the "Mulai
+  // Wawancara" click) is what unlocks it before the first enqueue() arrives.
   function ensureContext(): { ctx: AudioContext; analyser: AnalyserNode } {
     if (!ctx) {
       ctx = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
