@@ -63,19 +63,78 @@ function appendOrOpen(
  * actually got inserted, so every later delta of the SAME spoken turn merges
  * back into it in place, however late it shows up and whatever the AI has
  * streamed in the meantime.
+ *
+ * `raw` and `startedAt` exist because a NEW turn can start while the previous
+ * one is still draining (barge-in: the AI replies ~1.5s after the user stops,
+ * the user cuts in a second later, and the first answer's ASR keeps arriving
+ * for seconds after that). A delta is therefore attributed to a turn by its
+ * ARRIVAL TIME, not by "whichever turn is open" — see turnForDelta(): anything
+ * landing within ASR_LAG_MS of a turn's rising edge was physically spoken
+ * before that turn began and belongs to `prev`. Without this the tail of
+ * answer #1 is re-ordered after the AI's bubble.
  */
 interface PendingUserTurn {
   /** Insertion index for this turn's bubble (transcript length when the user began speaking). */
   anchor: number;
   /** Index of this turn's bubble once it exists; null until the first flush with text. */
   index: number | null;
+  /** Local (zero-lag) clock at the rising edge that opened this turn. */
+  startedAt: number;
+  /** The turn spoken immediately before this one — still draining, possibly. */
+  prev: PendingUserTurn | null;
+  /**
+   * Every inputTranscription delta of this turn, concatenated VERBATIM (no
+   * trim, no separator: Gemini's deltas already carry their own spacing, and
+   * they split mid-word — trimming and re-joining each one turns "pengalaman"
+   * into "penga laman" and "kata." into "kata ."). The bubble's text is
+   * re-derived from this whole string on every flush, so a flush can never
+   * fall on a sub-word boundary.
+   */
+  raw: string;
+  /** raw changed since the last commit ⇒ the bubble needs rewriting. */
+  dirty: boolean;
+  /**
+   * Opened by an arriving delta rather than by the local detector (mic too
+   * quiet to trip the RMS floor, or mic denied). Such a turn has no rising
+   * edge to end it, so the debounce (ASR quiet ⇒ turn over) closes it instead.
+   */
+  synthetic: boolean;
+  /** A closed synthetic turn never takes new deltas — the next one opens a new turn. */
+  closed: boolean;
 }
 
 const DEBOUNCE_MS = 1200; // no new inputTranscript delta for this long ⇒ settle the buffer
 const THINKING_TIMEOUT_MS = 10000; // give up on 'AI sedang berpikir…' and fall back to 'idle'
-const DRAIN_IDLE_MS = 800; // "Akhiri Sesi": no new delta for this long ⇒ ASR is done
-const DRAIN_MAX_MS = 3000; // …but never hold the user on the spinner longer than this
+// Measured: inputTranscription runs ~3s behind the speaker. A delta arriving
+// less than this after a new turn's rising edge was spoken BEFORE that edge.
+const ASR_LAG_MS = 3000;
+// "Akhiri Sesi": no new delta for this long ⇒ ASR is done. Must be >= DEBOUNCE_MS:
+// mid-session we need 1.2s of ASR quiet to call a turn settled, so accepting less
+// at the highest-stakes moment would cut a still-draining sentence in half.
+const DRAIN_IDLE_MS = DEBOUNCE_MS;
+// …but never hold the user on the spinner longer than this. Measured worst-case
+// drain is 8.4s after the speaker stops; a few extra seconds under a spinner
+// beats a truncated answer in the evaluation.
+const DRAIN_MAX_MS = 9000;
 const DRAIN_POLL_MS = 100;
+
+/** ASR deltas are raw and may split mid-word — normalize the WHOLE turn, once. */
+function normalizeSpeech(raw: string): string {
+  return raw.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Where a user bubble goes when the local detector never gave us a rising edge
+ * (synthetic turn). The words are already ~3s old, so if the AI is mid-bubble
+ * they were spoken BEFORE that bubble opened: insert in front of it. Appending
+ * at the end instead would leave the AI's open bubble stranded behind the user's,
+ * and its next delta would open a SECOND ai bubble — one AI turn split in two.
+ */
+function anchorForLateSpeech(list: TranscriptBubbleData[]): number {
+  const last = list.length - 1;
+  if (last >= 0 && list[last].role === 'ai' && !list[last].final) return last;
+  return list.length;
+}
 
 /**
  * Live Interview Session — Variant "Klasik" (two-column) only, per plan §0.
@@ -104,12 +163,12 @@ export function Session() {
   //  - confirmEnd() awaits the ASR drain window before building `exchanges`,
   //    so its `transcript` closure is stale by then; the ref is always current.
   const transcriptRef = useRef<TranscriptBubbleData[]>([]);
-  // Whether there's unflushed user speech for the CURRENT turn — drives the
-  // 3-dot placeholder bubble. The text itself lives in pendingUserTextRef
-  // (below), never in state: it must never be rendered as a running bubble
-  // (see appendOrOpen's comment for why — that's the lagging-caption promise
-  // this whole change removes). flushPendingUser() settles it into one final
-  // bubble once the turn is over.
+  // Whether there's unflushed user speech — drives the 3-dot placeholder
+  // bubble. The text itself lives on the pending turn (PendingUserTurn.raw),
+  // never in state: it must never be rendered as a running bubble (see
+  // appendOrOpen's comment for why — that's the lagging-caption promise this
+  // whole change removes). flushPendingUser() settles it into one final bubble
+  // per spoken turn.
   const [userTyping, setUserTyping] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -117,6 +176,10 @@ export function Session() {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
+  // Re-entry guard for confirmEnd(): the modal unmounts on confirm, but the
+  // endError screen's "Coba lagi" calls it again and a double-click there would
+  // otherwise fire two /analyze + /end pairs.
+  const endingRef = useRef(false);
 
   const isMountedRef = useRef(true);
   const liveRef = useRef<LiveInterview | null>(null);
@@ -127,15 +190,14 @@ export function Session() {
   const tornRef = useRef(false);
   const micStateRef = useRef<MicState>('disabled');
   const retryingRef = useRef(false);
-  // Accumulates onInputTranscript deltas for the user's current, unflushed
-  // turn. A ref (not state) because it's written from handlers created once
-  // inside connect() (closed over stale state otherwise) and because
-  // confirmEnd() needs a synchronous read of "whatever's pending right now"
-  // — see flushPendingUser() and confirmEnd() below.
-  const pendingUserTextRef = useRef('');
-  // Which spoken turn the buffered text belongs to, and where its bubble goes.
+  // Head of the spoken-turn chain: the most recent user turn, linked back to
+  // the ones before it (which may still be draining). Each turn carries its own
+  // raw ASR buffer — see PendingUserTurn, turnForDelta() and flushPendingUser().
+  // A ref (not state) because it's written from handlers created once inside
+  // connect() (closed over stale state otherwise) and because confirmEnd() needs
+  // a synchronous read of "whatever's pending right now".
   const pendingTurnRef = useRef<PendingUserTurn | null>(null);
-  // Debounce timer: flush pendingUserTextRef after ~1.2s with no new
+  // Debounce timer: flush the pending turns after ~1.2s with no new
   // inputTranscript delta (brief's rule (b) for "turn is over").
   const debounceTimerRef = useRef<number | null>(null);
   // Mirrors the local-speech-detection boolean (see below) for the same
@@ -196,68 +258,106 @@ export function Session() {
     isUserSpeakingRef.current = isUserSpeaking;
   }, [isUserSpeaking]);
 
+  /** The chain of spoken turns, oldest first. */
+  const turnChain = useCallback((): PendingUserTurn[] => {
+    const chain: PendingUserTurn[] = [];
+    for (let t = pendingTurnRef.current; t; t = t.prev) chain.unshift(t);
+    return chain;
+  }, []);
+
   /**
-   * Settle the buffered `inputTranscription` text into THIS spoken turn's
+   * Which spoken turn an inputTranscription delta arriving RIGHT NOW belongs to.
+   *
+   * Gemini's ASR is ~3s behind the speaker, so a delta landing less than
+   * ASR_LAG_MS after a turn's rising edge carries words spoken BEFORE that edge
+   * — i.e. the tail of the previous turn. Walking back the chain (rather than
+   * just taking the head) is what stops a barge-in from re-ordering the first
+   * answer's second half after the AI's reply.
+   *
+   * A closed turn is never walked into: it was closed by DEBOUNCE_MS of ASR
+   * quiet, so its drain is provably over and nothing new can belong to it.
+   */
+  const turnForDelta = useCallback((now: number): PendingUserTurn | null => {
+    let t = pendingTurnRef.current;
+    while (t && t.prev && !t.prev.closed && now - t.startedAt < ASR_LAG_MS) t = t.prev;
+    return t;
+  }, []);
+
+  /**
+   * Once a turn is older than ASR_LAG_MS, turnForDelta() can no longer walk past
+   * it, so nothing below it in the chain is reachable — and callers only trim
+   * right after a flush, so those turns are clean too. Cut them loose, or the
+   * chain (and the walk over it on every flush) grows for the whole session.
+   */
+  const trimTurnChain = useCallback((head: PendingUserTurn | null, now: number) => {
+    if (head && now - head.startedAt >= ASR_LAG_MS) head.prev = null;
+  }, []);
+
+  /**
+   * Settle every dirty turn's buffered `inputTranscription` text into ITS OWN
    * bubble. Idempotent — a no-op when nothing is buffered.
    *
-   * The bubble is located by index (pendingTurnRef.index), never by "the last
-   * bubble": by the time a turn's tail deltas arrive the AI has usually opened
-   * its own bubble already, and appending there would both misorder the
-   * transcript and split the AI's single turn in two. Merging by index instead
-   * keeps each speaker's turn contiguous and in the order it was actually
-   * spoken — which is exactly what /analyze scores.
+   * Each bubble is located by index (turn.index), never by "the last bubble":
+   * by the time a turn's tail deltas arrive the AI has usually opened its own
+   * bubble already, and appending there would both misorder the transcript and
+   * split the AI's single turn in two. Merging by index instead keeps each
+   * speaker's turn contiguous and in the order it was actually spoken — which
+   * is exactly what /analyze scores.
    *
-   * The same merge absorbs a mid-sentence ASR stall longer than the debounce:
-   * the second half simply merges back into the bubble the first half opened.
+   * The bubble's text is REWRITTEN from the turn's whole raw buffer (never
+   * appended to with a synthetic separator), so flushing on every AI audio
+   * chunk cannot mangle words that a delta boundary happened to split.
    */
   const flushPendingUser = useCallback(() => {
     if (debounceTimerRef.current !== null) {
       window.clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    const text = pendingUserTextRef.current.trim();
-    pendingUserTextRef.current = '';
     setUserTyping(false);
-    if (text.length === 0) return;
 
-    const turn = pendingTurnRef.current;
+    const chain = turnChain();
+    const dirty = chain.filter((t) => t.dirty);
+    if (dirty.length === 0) return;
+
     commitTranscript((prev) => {
       const next = [...prev];
 
-      // (1) This turn already has a bubble → merge in place, wherever it sits.
-      const idx = turn?.index ?? -1;
-      if (idx >= 0 && next[idx]?.role === 'user') {
-        const bubble = next[idx];
-        next[idx] = { ...bubble, text: bubble.text ? `${bubble.text} ${text}` : text };
-        return next;
-      }
+      // Oldest turn first: an older turn's insert shifts the newer ones' indices.
+      for (const turn of dirty) {
+        turn.dirty = false;
+        const text = normalizeSpeech(turn.raw);
+        if (text.length === 0) continue;
 
-      // (2) No local turn was ever opened (mic denied, or speech too quiet to
-      //     trip the detector): fall back to merging into a trailing user
-      //     bubble, so a stalled ASR still can't fragment one spoken turn.
-      if (!turn) {
-        const last = next.length - 1;
-        if (last >= 0 && next[last].role === 'user') {
-          next[last] = { ...next[last], text: `${next[last].text} ${text}` };
-          return next;
+        // (1) This turn already has a bubble → rewrite it in place, wherever it
+        //     sits (typically above the AI bubble that opened mid-drain).
+        const idx = turn.index;
+        if (idx !== null && next[idx]?.role === 'user') {
+          next[idx] = { ...next[idx], text };
+          continue;
         }
-        next.push({ role: 'user', text, final: true });
-        return next;
+
+        // (2) First text for this turn → insert at its anchor: the slot reserved
+        //     when the user started speaking (detector-driven turn), or in front
+        //     of the AI's open bubble (synthetic turn — the words predate it).
+        const at = Math.min(turn.anchor, next.length);
+        const before = next[at - 1];
+        // Whoever spoke immediately before this turn is definitively finished.
+        if (before && !before.final) next[at - 1] = { ...before, final: true };
+        // User bubbles are born final: they are settled text, never a live
+        // caption (the whole point of buffering — see TranscriptPanel).
+        next.splice(at, 0, { role: 'user', text, final: true });
+        for (const other of chain) {
+          if (other === turn) continue;
+          if (other.anchor >= at) other.anchor += 1;
+          if (other.index !== null && other.index >= at) other.index += 1;
+        }
+        turn.anchor = at;
+        turn.index = at;
       }
 
-      // (3) First text for this turn → insert at the anchor reserved when the
-      //     user started speaking, i.e. BEFORE anything the AI has said since.
-      const anchor = Math.min(turn.anchor, next.length);
-      const before = next[anchor - 1];
-      // Whoever spoke immediately before this turn is definitively finished.
-      if (before && !before.final) next[anchor - 1] = { ...before, final: true };
-      // User bubbles are born final: they are settled text, never a live
-      // caption (the whole point of buffering — see TranscriptPanel).
-      next.splice(anchor, 0, { role: 'user', text, final: true });
-      turn.index = anchor;
       return next;
     });
-  }, [commitTranscript]);
+  }, [commitTranscript, turnChain]);
 
   // speaker state machine, driven by the local signal (instant), not by
   // server transcript events (laggy — see the Fase 3 liveness brief):
@@ -272,15 +372,28 @@ export function Session() {
   // turn's transcript slot is reserved.
   useEffect(() => {
     if (isUserSpeaking) {
-      // Anything still buffered belongs to the PREVIOUS turn — settle it there
-      // before the anchor moves.
+      // Settle what has arrived so far into the turns it belongs to, then open
+      // the new turn. Deltas that are still in flight from the PREVIOUS turn
+      // (up to ASR_LAG_MS of them, on a barge-in) are not lost: turnForDelta()
+      // keeps routing them back down the chain to that turn's own bubble.
       flushPendingUser();
-      pendingTurnRef.current = { anchor: transcriptRef.current.length, index: null };
+      const now = Date.now();
+      trimTurnChain(pendingTurnRef.current, now);
+      pendingTurnRef.current = {
+        anchor: transcriptRef.current.length,
+        index: null,
+        startedAt: now,
+        prev: pendingTurnRef.current,
+        raw: '',
+        dirty: false,
+        synthetic: false,
+        closed: false,
+      };
       setSpeaker('user');
     } else {
       setSpeaker((prev) => (prev === 'user' ? 'thinking' : prev));
     }
-  }, [isUserSpeaking, flushPendingUser]);
+  }, [isUserSpeaking, flushPendingUser, trimTurnChain]);
 
   // 'thinking' is entered when the user goes quiet, and only an AI delta
   // leaves it. If the AI never replies (dropped turn, a cough the model has
@@ -341,9 +454,11 @@ export function Session() {
    * keeps emitting `inputTranscription` for seconds after they stop, so closing
    * the socket the instant the user confirms (what we used to do) simply lost
    * their final sentence from the evaluation. Instead: keep collecting deltas
-   * until the ASR goes quiet for 800ms, or 3s pass — whichever comes first. The
-   * "Menganalisis jawaban Anda…" spinner is already on screen, so the wait is
-   * invisible.
+   * until the ASR goes quiet for DRAIN_IDLE_MS (the same 1.2s of quiet we
+   * require mid-session before calling a turn settled — anything less would end
+   * the drain on a pause *inside* a still-arriving sentence), or DRAIN_MAX_MS
+   * pass — whichever comes first. The "Menganalisis jawaban Anda…" spinner is
+   * already on screen, so the wait is invisible.
    *
    * THE MIC MUST KEEP STREAMING FOR THE WHOLE WINDOW. This is the same trap as
    * gating sendAudio: probe-vad-report.md ("Starving the VAD") measured that
@@ -352,11 +467,11 @@ export function Session() {
    * never finalizes. A real mic keeps streaming ambient near-silence, and that
    * continuing stream is what ends the turn. Stopping capture before the drain
    * would therefore freeze the very ASR we are waiting on: the window would
-   * burn its 3s and collect nothing. Capture is stopped by teardown(), AFTER
-   * this resolves.
+   * burn its whole budget and collect nothing. Capture is stopped by teardown(),
+   * AFTER this resolves.
    *
-   * NOT a guarantee: the measured drain can reach 8.4s, so the hard cap still
-   * truncates the worst cases. It is a mitigation.
+   * NOT a guarantee: the hard cap can still truncate a pathological drain. It is
+   * a mitigation, sized to the measured 8.4s worst case.
    */
   const drainInputTranscript = useCallback(() => {
     return new Promise<void>((resolve) => {
@@ -450,16 +565,45 @@ export function Session() {
         },
         onInputTranscript: (delta) => {
           if (myGen !== connectGenRef.current) return;
-          // Never rendered live (see appendOrOpen's comment) — just buffered
-          // until the turn settles into its bubble (flushPendingUser).
-          // Debounce rule (b): flush after ~1.2s of no new delta.
-          lastInputDeltaAtRef.current = Date.now(); // feeds the drain window
-          pendingUserTextRef.current += delta;
+          // Never rendered live (see appendOrOpen's comment) — just buffered on
+          // the turn it was SPOKEN in (turnForDelta: ~3s of ASR lag means the
+          // newest turn is usually not it) until that turn settles into its
+          // bubble (flushPendingUser).
+          const now = Date.now();
+          lastInputDeltaAtRef.current = now; // feeds the drain window
+          let head = pendingTurnRef.current;
+          if (!head || head.closed) {
+            // The local detector never fired for this speech (mic below the RMS
+            // floor, or denied). Open a turn from the delta itself: the words are
+            // already ~ASR_LAG_MS old, so date it accordingly and anchor it in
+            // front of any AI bubble that opened after they were spoken.
+            trimTurnChain(head, now);
+            head = {
+              anchor: anchorForLateSpeech(transcriptRef.current),
+              index: null,
+              startedAt: now - ASR_LAG_MS,
+              prev: head,
+              raw: '',
+              dirty: false,
+              synthetic: true,
+              closed: false,
+            };
+            pendingTurnRef.current = head;
+          }
+          const target = turnForDelta(now) ?? head;
+          // Verbatim concatenation — see PendingUserTurn.raw.
+          target.raw += delta;
+          target.dirty = true;
           setUserTyping(true);
           if (debounceTimerRef.current !== null) window.clearTimeout(debounceTimerRef.current);
+          // Debounce rule (b): flush after ~1.2s of no new delta.
           debounceTimerRef.current = window.setTimeout(() => {
             debounceTimerRef.current = null;
             flushPendingUser();
+            // ASR has gone quiet ⇒ the turn is over. A detector-driven turn is
+            // ended by the next rising edge; a synthetic one has no such edge.
+            const open = pendingTurnRef.current;
+            if (open?.synthetic) open.closed = true;
           }, DEBOUNCE_MS);
         },
         onOutputTranscript: (delta) => {
@@ -471,14 +615,17 @@ export function Session() {
           // merge back into that same bubble (see flushPendingUser), so this
           // can neither misorder nor fragment the turn.
           flushPendingUser();
-          setSpeaker('ai');
+          // Not while the user is talking over us (barge-in): the local signal
+          // is the truth about who is speaking, and this event may be a chunk
+          // that was already in flight when they cut in.
+          if (!isUserSpeakingRef.current) setSpeaker('ai');
           commitTranscript((prev) => appendOrOpen(prev, 'ai', delta));
         },
         onAudioChunk: (b64) => {
           if (myGen !== connectGenRef.current) return;
           if (drainingRef.current) return; // ending: don't play / reopen bubbles
           flushPendingUser(); // same rule (a) — the AI audio itself is the signal
-          setSpeaker('ai');
+          if (!isUserSpeakingRef.current) setSpeaker('ai');
           playbackRef.current?.enqueue(b64);
         },
         onTurnComplete: () => {
@@ -501,6 +648,18 @@ export function Session() {
         onInterrupted: () => {
           if (myGen !== connectGenRef.current) return;
           playbackRef.current?.clear();
+          // Nothing is playing any more, so 'ai' would be a lie — and it is the
+          // one speaker state with no escape hatch (the timeout only rescues
+          // 'thinking'), so leaving it here can pin "AI sedang berbicara" on
+          // screen for good. Barge-in is the usual cause: trust the local signal.
+          setSpeaker(isUserSpeakingRef.current ? 'user' : 'idle');
+          // The cut-off AI turn is over. Finalize its bubble so the model's next
+          // turn opens its own instead of continuing this one.
+          commitTranscript((prev) => {
+            const last = prev[prev.length - 1];
+            if (!last || last.role !== 'ai' || last.final) return prev;
+            return [...prev.slice(0, -1), { ...last, final: true }];
+          });
         },
         onError: (err) => {
           if (myGen !== connectGenRef.current) return;
@@ -528,7 +687,7 @@ export function Session() {
       setConnState('error');
       setConnectError('Gagal terhubung ke pewawancara AI. Coba lagi.');
     }
-  }, [id, startMic, startTimer, flushPendingUser, commitTranscript]);
+  }, [id, startMic, startTimer, flushPendingUser, commitTranscript, turnForDelta, trimTurnChain]);
 
   // --- mount: fetch session meta only. Playback/mic/connect are deferred to
   // handleStart() (the "Mulai Wawancara" user gesture) — this effect only
@@ -627,10 +786,19 @@ export function Session() {
 
   async function confirmEnd() {
     if (!id) return;
+    if (endingRef.current) return; // already ending (double-click on "Coba lagi")
+    endingRef.current = true;
     setShowEndConfirm(false);
     setEndError(null);
     setEnding(true);
     try {
+      // Silence the AI immediately: the drain window below keeps the socket open
+      // for seconds, and without this its queued audio would keep talking over
+      // the "Menganalisis jawaban Anda…" spinner. (Playback is *closed* later,
+      // by teardown().) Note this only drops what is already queued — the
+      // handlers stop enqueueing as soon as drainingRef is set.
+      playbackRef.current?.clear();
+
       // Order matters. Keep BOTH the mic and the socket running through the
       // drain window: the words the user just said are still ~3s back in
       // Gemini's ASR, and it is the continuing audio stream (ambient silence
@@ -638,23 +806,24 @@ export function Session() {
       // stopping capture first would starve it and collect nothing. teardown()
       // then closes mic + socket + playback together, once the drain is done.
       //
-      // The mic is therefore hot for up to 3s after the user confirms. They are
-      // on the "Menganalisis jawaban Anda…" spinner, and `ending` has already
-      // detached the local speech detector — so no new user turn can be opened;
-      // any late delta merges into the turn they already spoke (flushPendingUser).
+      // The mic is therefore hot for up to DRAIN_MAX_MS after the user confirms.
+      // They are on the "Menganalisis jawaban Anda…" spinner, and `ending` has
+      // already detached the local speech detector — so no new user turn can be
+      // opened; every late delta merges into the turn it was spoken in
+      // (turnForDelta → flushPendingUser).
       await drainInputTranscript();
       if (!isMountedRef.current) return;
 
       await teardown();
       if (!isMountedRef.current) return;
 
-      // Settle whatever the drain collected into its bubble. Safe to read the
-      // result immediately: commitTranscript writes transcriptRef
+      // Settle whatever the drain collected into its turn's bubble. Safe to read
+      // the result immediately: commitTranscript writes transcriptRef
       // synchronously (the `transcript` state, and any closure over it, is a
-      // render behind). Going through flushPendingUser() — rather than
-      // appending the trailing text at the end as we used to — is what keeps
-      // the user's final sentence merged into ITS OWN turn's bubble, in the
-      // order it was spoken.
+      // render behind). Going through flushPendingUser() — rather than appending
+      // the trailing text at the end as we used to — is what keeps the user's
+      // final sentence merged into ITS OWN turn's bubble, in the order it was
+      // spoken.
       flushPendingUser();
 
       const exchanges: TranscriptExchange[] = transcriptRef.current
@@ -690,6 +859,7 @@ export function Session() {
 
       navigate(`/result/${id}`, { state: { evaluation: evaluation as Evaluation } });
     } catch (err) {
+      endingRef.current = false; // let the error screen's "Coba lagi" run again
       if (!isMountedRef.current) return;
       setEnding(false);
       const message =
