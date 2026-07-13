@@ -34,6 +34,14 @@ export interface LiveInterviewHandlers {
 
 export interface LiveInterview {
   sendAudio(pcmBase64: string): void; // → session.sendRealtimeInput audio
+  /**
+   * Manual retry ("Coba sekarang"). Re-opens THIS instance with its existing
+   * session-resumption handle, so the conversation continues where it dropped
+   * and the kickoff turn is not re-sent (the AI must not greet again
+   * mid-interview). Never throws: failures land in onStateChange('error') +
+   * onError, so the UI can offer another retry.
+   */
+  reconnect(): Promise<void>;
   close(): Promise<void>; // explicit graceful close; no reconnect after
   readonly state: ConnState;
 }
@@ -45,6 +53,8 @@ const KICKOFF_PROMPT =
 const MAX_RECONNECT_ATTEMPTS = 3;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 4000;
+const MAX_KICKOFF_ATTEMPTS = 3;
+const KICKOFF_RETRY_DELAY_MS = 600;
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
@@ -75,11 +85,13 @@ export async function createLiveInterview(
   // Monotonic id: each connection attempt bumps it so callbacks from a
   // superseded (stale/failed) socket are ignored.
   let activeGen = 0;
-  // Gemini Live tidak bicara sampai menerima input. Satu giliran pemicu ini
-  // membuat pewawancara menyapa + mengajukan pertanyaan pertama sendiri.
-  // Teks pemicu TIDAK pernah masuk ke transkrip UI/DB: ia dikirim sebagai text
-  // turn, sedangkan transkrip pengguna hanya berasal dari inputAudioTranscription.
+  // Gemini Live stays silent until it receives input. This one-time kickoff
+  // turn is what makes the interviewer greet and ask the first question by
+  // itself. It never reaches the UI/DB transcript: it is sent as a text turn,
+  // while the user transcript only comes from inputAudioTranscription.
   let kickoffSent = false;
+  // Attempts for the CURRENT connection; reset on every (re)connect.
+  let kickoffAttempts = 0;
 
   function setState(next: ConnState): void {
     if (state === next) return;
@@ -87,10 +99,10 @@ export async function createLiveInterview(
     handlers.onStateChange(next);
   }
 
-  // Audio keluaran model. Diambil dari `msg.data` (accessor bawaan SDK) dengan
-  // fallback ke `inlineData.data`. Sengaja TIDAK disaring berdasarkan mimeType:
-  // menyaringnya akan membuang seluruh audio diam-diam bila suatu model tidak
-  // mengirim mimeType.
+  // Model output audio, read from `msg.data` (the SDK's built-in accessor)
+  // with a fallback to `inlineData.data`. Deliberately NOT filtered by
+  // mimeType: filtering would silently drop all audio if a model ever omits
+  // the mimeType.
   function emitAudio(msg: LiveServerMessage): void {
     if (msg.data) {
       handlers.onAudioChunk(msg.data);
@@ -119,11 +131,17 @@ export async function createLiveInterview(
     if (sc.turnComplete) handlers.onTurnComplete();
   }
 
-  // Hanya untuk koneksi PERTAMA. Saat reconnect (session resumption) riwayat
-  // sudah dipulihkan, jadi mengirim ulang pemicu akan membuat AI mengulang
-  // sapaannya di tengah sesi.
+  // Sent on the FIRST connection only. On reconnect (session resumption) the
+  // history is restored, so re-sending the kickoff would make the AI greet
+  // again mid-interview.
+  //
+  // A throwing send on an otherwise-open socket would leave the model silent
+  // forever, so it is retried a few times; if it still fails the session goes
+  // to 'error' and the UI can offer a manual retry (which re-opens the socket
+  // and tries the kickoff again, since kickoffSent is still false).
   function sendKickoff(s: Session): void {
     if (kickoffSent || closing) return;
+    const myGen = activeGen;
     try {
       s.sendClientContent({
         turns: [{ role: 'user', parts: [{ text: KICKOFF_PROMPT }] }],
@@ -131,7 +149,16 @@ export async function createLiveInterview(
       });
       kickoffSent = true;
     } catch (e) {
-      handlers.onError(toError(e));
+      kickoffAttempts += 1;
+      if (kickoffAttempts >= MAX_KICKOFF_ATTEMPTS) {
+        setState('error');
+        handlers.onError(toError(e));
+        return;
+      }
+      setTimeout(() => {
+        if (closing || kickoffSent || myGen !== activeGen || session !== s) return;
+        sendKickoff(s);
+      }, KICKOFF_RETRY_DELAY_MS);
     }
   }
 
@@ -174,6 +201,7 @@ export async function createLiveInterview(
   // that only the newest connection's callbacks are honoured.
   async function openConnection(handle: string | undefined): Promise<void> {
     const myGen = ++activeGen;
+    kickoffAttempts = 0;
 
     // Tokens are single-use (uses:1), so we re-mint on every (re)connect.
     const { token, model } = await apiRequest<{ token: string; model: string }>(
@@ -220,6 +248,37 @@ export async function createLiveInterview(
     sendKickoff(next);
   }
 
+  // Manual retry from the UI. Re-opens the SAME instance so the closure state
+  // that makes a mid-interview retry safe survives: `resumptionHandle` (the
+  // conversation continues) and `kickoffSent` (the AI does not greet twice).
+  async function reconnect(): Promise<void> {
+    if (closing || reconnectInFlight) return;
+    reconnectInFlight = true;
+    reconnectAttempts = 0;
+    setState('reconnecting');
+
+    // Invalidate the old socket's callbacks before closing it, so its onclose
+    // can't be mistaken for a fresh drop and schedule a competing reconnect.
+    activeGen += 1;
+    try {
+      session?.close();
+    } catch {
+      /* already closed / never opened */
+    }
+    session = null;
+
+    try {
+      await openConnection(resumptionHandle);
+    } catch (e) {
+      if (!closing) {
+        setState('error');
+        handlers.onError(toError(e));
+      }
+    } finally {
+      reconnectInFlight = false;
+    }
+  }
+
   async function close(): Promise<void> {
     if (closing) return; // idempotent
     closing = true;
@@ -247,6 +306,7 @@ export async function createLiveInterview(
       if (state !== 'connected' || !session) return;
       session.sendRealtimeInput({ audio: { data: pcmBase64, mimeType: INPUT_AUDIO_MIME } });
     },
+    reconnect,
     close,
     get state(): ConnState {
       return state;
