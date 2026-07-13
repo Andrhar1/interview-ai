@@ -15,7 +15,10 @@ const WORKLET_NAME = 'pcm-capture';
 
 export interface MicCapture {
   start(): Promise<void>;
+  /** Mute: releases the mic hardware, keeps the AudioContext so start() can resume. */
   stop(): void;
+  /** Full teardown: stop() + close the AudioContext. This MicCapture is dead after. */
+  close(): Promise<void>;
   readonly analyser: AnalyserNode;
   readonly active: boolean;
 }
@@ -25,19 +28,22 @@ export function createMicCapture(onChunk: (pcmBase64: string) => void): MicCaptu
   let source: MediaStreamAudioSourceNode | null = null;
   let workletNode: AudioWorkletNode | null = null;
   let active = false;
+  let closed = false;
 
   // Created eagerly (starts 'suspended' until start() resumes it) so
   // `analyser` is available to callers immediately, and so it lives in the
   // same 16kHz AudioContext as the mic source for the lifetime of this
   // MicCapture — nodes can only connect to other nodes in the same context,
-  // so the context is never closed/replaced here. Actual mic hardware
-  // release (the OS indicator) is handled by stopping the MediaStreamTrack
-  // in stop(), independent of the AudioContext's lifecycle.
+  // so the context is never replaced here; it is only closed by close(), at
+  // which point this MicCapture is done. Actual mic hardware release (the OS
+  // indicator) is handled by stopping the MediaStreamTrack in stop(),
+  // independent of the AudioContext's lifecycle.
   const ctx = new AudioContext({ sampleRate: 16000 });
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 256;
 
   async function start(): Promise<void> {
+    if (closed) throw new Error('MicCapture is closed');
     if (active) return;
 
     stream = await navigator.mediaDevices.getUserMedia({
@@ -87,9 +93,26 @@ export function createMicCapture(onChunk: (pcmBase64: string) => void): MicCaptu
     active = false;
   }
 
+  // Browsers cap the number of AudioContexts per document (~6), so a session
+  // that only suspend()s leaks one context per session and eventually makes
+  // `new AudioContext()` throw. Call this on teardown, never on mute.
+  async function close(): Promise<void> {
+    if (closed) return;
+    closed = true;
+    stop();
+    if (ctx.state !== 'closed') {
+      try {
+        await ctx.close();
+      } catch {
+        /* already closed / closing */
+      }
+    }
+  }
+
   return {
     start,
     stop,
+    close,
     analyser,
     get active() {
       return active;

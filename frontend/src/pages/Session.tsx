@@ -65,7 +65,6 @@ export function Session() {
   const [micState, setMicState] = useState<MicState>('disabled');
   const [speaker, setSpeaker] = useState<SpeakerState>('idle');
   const [transcript, setTranscript] = useState<TranscriptBubbleData[]>([]);
-  const [questionsDone, setQuestionsDone] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -104,12 +103,11 @@ export function Session() {
       window.clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-    try {
-      captureRef.current?.stop();
-    } catch {
-      /* best effort */
-    }
     const closes: Promise<unknown>[] = [];
+    // close() (not stop()) — stop() only suspends the 16kHz AudioContext, and
+    // browsers cap the number of live contexts per document, so suspending on
+    // every session would eventually make `new AudioContext()` throw.
+    if (captureRef.current) closes.push(captureRef.current.close());
     if (liveRef.current) closes.push(liveRef.current.close());
     if (playbackRef.current) closes.push(playbackRef.current.close());
     await Promise.allSettled(closes);
@@ -120,7 +118,15 @@ export function Session() {
 
   const startMic = useCallback(() => {
     if (captureRef.current) return; // already created (e.g. after a reconnect)
-    const capture = createMicCapture((pcm) => liveRef.current?.sendAudio(pcm));
+    let capture: MicCapture;
+    try {
+      // `new AudioContext()` inside createMicCapture can throw synchronously
+      // (e.g. the browser's per-document context cap).
+      capture = createMicCapture((pcm) => liveRef.current?.sendAudio(pcm));
+    } catch {
+      setMicState('denied');
+      return;
+    }
     captureRef.current = capture;
     capture
       .start()
@@ -138,7 +144,11 @@ export function Session() {
     }, 1000);
   }, []);
 
-  // --- connect (used at mount and by the manual "Coba sekarang" retry).
+  // --- connect: creates a NEW live client. Called from the "Mulai Wawancara"
+  // click handler, and from retry() only when no client was ever established
+  // (the very first connect failed). A mid-interview retry must go through
+  // LiveInterview.reconnect() instead, so the session-resumption handle and
+  // the "kickoff already sent" flag survive.
   const connect = useCallback(async () => {
     if (!id) return;
     const myGen = ++connectGenRef.current;
@@ -190,7 +200,6 @@ export function Session() {
             }
             return prev;
           });
-          setQuestionsDone((n) => n + 1);
           setSpeaker(micStateRef.current === 'unmuted' ? 'user' : 'idle');
         },
         onInterrupted: () => {
@@ -199,7 +208,10 @@ export function Session() {
         },
         onError: (err) => {
           if (myGen !== connectGenRef.current) return;
-          setConnectError(err.message || 'Koneksi Gemini bermasalah.');
+          // Never render the raw SDK error: it can embed the WSS URL, which
+          // carries the single-use ephemeral token.
+          console.error('[live] session error:', err.name);
+          setConnectError('Koneksi ke pewawancara AI bermasalah.');
         },
       });
       if (myGen !== connectGenRef.current) {
@@ -213,8 +225,10 @@ export function Session() {
       liveRef.current = live;
     } catch (err) {
       if (myGen !== connectGenRef.current) return; // superseded; ignore stale error
+      // Same reason as onError: keep the raw message out of the DOM.
+      console.error('[live] connect failed:', err instanceof Error ? err.name : 'unknown');
       setConnState('error');
-      setConnectError(err instanceof Error ? err.message : 'Gagal terhubung ke pewawancara AI.');
+      setConnectError('Gagal terhubung ke pewawancara AI. Coba lagi.');
     }
   }, [id, startMic, startTimer]);
 
@@ -287,11 +301,22 @@ export function Session() {
     }
   }
 
+  // Manual "Coba sekarang". Re-opens the EXISTING live client whenever we have
+  // one: that keeps its session-resumption handle and its "kickoff already
+  // sent" flag, so the interview resumes where it dropped instead of the AI
+  // greeting again and re-asking question 1. A fresh connect() is only correct
+  // when nothing was ever established (the very first connect failed).
   async function retry() {
     if (retryingRef.current) return;
     retryingRef.current = true;
+    setConnectError(null);
     try {
-      await connect();
+      const live = liveRef.current;
+      if (live) {
+        await live.reconnect();
+      } else {
+        await connect();
+      }
     } finally {
       retryingRef.current = false;
     }
@@ -351,10 +376,13 @@ export function Session() {
     }
   }
 
-  const lastAiBubble = useMemo(
-    () => [...transcript].reverse().find((m) => m.role === 'ai'),
-    [transcript],
-  );
+  const aiBubbles = useMemo(() => transcript.filter((m) => m.role === 'ai'), [transcript]);
+  const lastAiBubble = aiBubbles[aiBubbles.length - 1];
+  // The number must match the AI turn actually on screen: one bubble per AI
+  // turn, and the card always shows the last one. (Counting the closing
+  // summary as a "question" is accepted — the eyebrow is a 5–7 range, not an
+  // exact total.) Floors at 1 so the placeholder never reads "Pertanyaan 0".
+  const questionNumber = Math.max(1, aiBubbles.length);
   const questionText = lastAiBubble?.text || 'Menyiapkan pertanyaan…';
   const aiTyping = speaker === 'ai' && (!lastAiBubble || lastAiBubble.final || lastAiBubble.text.length === 0);
 
@@ -440,7 +468,7 @@ export function Session() {
               />
             </Card>
 
-            <QuestionCard n={questionsDone + 1} text={questionText} />
+            <QuestionCard n={questionNumber} text={questionText} />
 
             <Card className="flex flex-col items-center gap-4 p-7">
               <MicControl micState={micState} onToggle={toggleMic} />
