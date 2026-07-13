@@ -35,11 +35,10 @@ export interface LiveInterviewHandlers {
 export interface LiveInterview {
   sendAudio(pcmBase64: string): void; // → session.sendRealtimeInput audio
   /**
-   * Manual retry ("Coba sekarang"). Re-opens THIS instance with its existing
-   * session-resumption handle, so the conversation continues where it dropped
-   * and the kickoff turn is not re-sent (the AI must not greet again
-   * mid-interview). Never throws: failures land in onStateChange('error') +
-   * onError, so the UI can offer another retry.
+   * Manual retry ("Coba sekarang"). Re-opens THIS instance, reusing its
+   * session-resumption handle, so a mid-interview retry continues the same
+   * conversation and the AI does not greet again. Never throws: failures land
+   * in onStateChange('error') + onError, so the UI can offer another retry.
    */
   reconnect(): Promise<void>;
   close(): Promise<void>; // explicit graceful close; no reconnect after
@@ -85,13 +84,31 @@ export async function createLiveInterview(
   // Monotonic id: each connection attempt bumps it so callbacks from a
   // superseded (stale/failed) socket are ignored.
   let activeGen = 0;
-  // Gemini Live stays silent until it receives input. This one-time kickoff
-  // turn is what makes the interviewer greet and ask the first question by
-  // itself. It never reaches the UI/DB transcript: it is sent as a text turn,
-  // while the user transcript only comes from inputAudioTranscription.
-  let kickoffSent = false;
-  // Attempts for the CURRENT connection; reset on every (re)connect.
+  // Gemini Live stays silent until it receives input. The kickoff turn is what
+  // makes the interviewer greet and ask the first question by itself. It never
+  // reaches the UI/DB transcript: it is sent as a text turn, while the user
+  // transcript only comes from inputAudioTranscription.
+  //
+  // INVARIANT: kickoff iff the session we just opened has NO history — which is
+  // exactly "we opened it without a resumption handle" (see openConnection).
+  // These two flags are therefore per-CONNECTION delivery bookkeeping (did the
+  // send land, how many times have we tried), NOT a lifetime "already greeted"
+  // latch. Both are reset at the top of every openConnection.
+  let kickoffDelivered = false;
   let kickoffAttempts = 0;
+  // Has a kickoff ever landed in THIS interview? A resumption handle only
+  // represents real history once the model has been given something to respond
+  // to: the server can hand out a handle as soon as a session is established,
+  // so if the kickoff send threw (see sendKickoff) and the socket then dropped,
+  // that handle points at an EMPTY session. Resuming it would restore nothing
+  // and — having a handle — skip the kickoff, leaving the AI silent forever.
+  let kickoffEverDelivered = false;
+
+  // The handle to (re)open with: only a handle from a session that actually
+  // received the kickoff carries conversation history.
+  function historyHandle(): string | undefined {
+    return kickoffEverDelivered ? resumptionHandle : undefined;
+  }
 
   function setState(next: ConnState): void {
     if (state === next) return;
@@ -131,23 +148,23 @@ export async function createLiveInterview(
     if (sc.turnComplete) handlers.onTurnComplete();
   }
 
-  // Sent on the FIRST connection only. On reconnect (session resumption) the
-  // history is restored, so re-sending the kickoff would make the AI greet
-  // again mid-interview.
+  // Only called by openConnection, and only for a session opened WITHOUT a
+  // resumption handle (i.e. one with no history — see the invariant above).
   //
   // A throwing send on an otherwise-open socket would leave the model silent
   // forever, so it is retried a few times; if it still fails the session goes
-  // to 'error' and the UI can offer a manual retry (which re-opens the socket
-  // and tries the kickoff again, since kickoffSent is still false).
+  // to 'error' so the UI can offer a manual retry ("Coba sekarang"), which
+  // re-opens the socket and — still having no handle — kicks off again.
   function sendKickoff(s: Session): void {
-    if (kickoffSent || closing) return;
+    if (kickoffDelivered || closing) return;
     const myGen = activeGen;
     try {
       s.sendClientContent({
         turns: [{ role: 'user', parts: [{ text: KICKOFF_PROMPT }] }],
         turnComplete: true,
       });
-      kickoffSent = true;
+      kickoffDelivered = true;
+      kickoffEverDelivered = true;
     } catch (e) {
       kickoffAttempts += 1;
       if (kickoffAttempts >= MAX_KICKOFF_ATTEMPTS) {
@@ -156,7 +173,7 @@ export async function createLiveInterview(
         return;
       }
       setTimeout(() => {
-        if (closing || kickoffSent || myGen !== activeGen || session !== s) return;
+        if (closing || kickoffDelivered || myGen !== activeGen || session !== s) return;
         sendKickoff(s);
       }, KICKOFF_RETRY_DELAY_MS);
     }
@@ -189,7 +206,7 @@ export async function createLiveInterview(
     }
 
     try {
-      await openConnection(resumptionHandle);
+      await openConnection(historyHandle());
       reconnectInFlight = false;
     } catch (e) {
       reconnectInFlight = false;
@@ -201,6 +218,9 @@ export async function createLiveInterview(
   // that only the newest connection's callbacks are honoured.
   async function openConnection(handle: string | undefined): Promise<void> {
     const myGen = ++activeGen;
+    // Per-connection kickoff bookkeeping (the decision to kick off at all is
+    // made below, from `handle`).
+    kickoffDelivered = false;
     kickoffAttempts = 0;
 
     // Tokens are single-use (uses:1), so we re-mint on every (re)connect.
@@ -221,6 +241,11 @@ export async function createLiveInterview(
         onopen: () => {
           if (myGen !== activeGen || closing) return;
           reconnectAttempts = 0;
+          // Don't overwrite an 'error' raised for THIS connection (a kickoff
+          // that exhausted its retries): the socket is open but the session is
+          // unusable, and 'connected' would hide the overlay that offers the
+          // only way out.
+          if (state === 'error') return;
           setState('connected');
         },
         onmessage: (msg: LiveServerMessage) => {
@@ -245,12 +270,22 @@ export async function createLiveInterview(
       return;
     }
     session = next;
-    sendKickoff(next);
+
+    // THE invariant: kickoff iff this session has no conversation history.
+    // - opened WITH a handle  → history restored → kicking off would make the
+    //   AI greet again mid-interview (and re-ask question 1).
+    // - opened WITHOUT a handle → brand-new session with no memory → without a
+    //   kickoff the model has nothing to respond to and stays silent forever.
+    //   This covers the first connect AND a drop that happens before the first
+    //   sessionResumptionUpdate arrives — greeting again is correct there,
+    //   because the model genuinely remembers nothing.
+    if (!handle) sendKickoff(next);
   }
 
   // Manual retry from the UI. Re-opens the SAME instance so the closure state
-  // that makes a mid-interview retry safe survives: `resumptionHandle` (the
-  // conversation continues) and `kickoffSent` (the AI does not greet twice).
+  // that makes a mid-interview retry safe survives — above all the resumption
+  // handle, which both continues the conversation and (per the invariant in
+  // openConnection) suppresses a second greeting.
   async function reconnect(): Promise<void> {
     if (closing || reconnectInFlight) return;
     reconnectInFlight = true;
@@ -268,7 +303,7 @@ export async function createLiveInterview(
     session = null;
 
     try {
-      await openConnection(resumptionHandle);
+      await openConnection(historyHandle());
     } catch (e) {
       if (!closing) {
         setState('error');
