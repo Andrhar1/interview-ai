@@ -124,12 +124,12 @@ export async function createLiveInterview(
   // sapaannya di tengah sesi.
   function sendKickoff(s: Session): void {
     if (kickoffSent || closing) return;
-    kickoffSent = true;
     try {
       s.sendClientContent({
         turns: [{ role: 'user', parts: [{ text: KICKOFF_PROMPT }] }],
         turnComplete: true,
       });
+      kickoffSent = true;
     } catch (e) {
       handlers.onError(toError(e));
     }
