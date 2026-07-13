@@ -18,6 +18,7 @@ import { MicControl } from '../features/session/MicControl';
 import { TranscriptPanel } from '../features/session/TranscriptPanel';
 import { ReconnectOverlay } from '../features/session/ReconnectOverlay';
 import { EndConfirmModal } from '../features/session/EndConfirmModal';
+import { PreSessionCard } from '../features/session/PreSessionCard';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 
@@ -58,7 +59,8 @@ export function Session() {
   const [fieldTitle, setFieldTitle] = useState('Wawancara');
   const [context, setContext] = useState('Konteks umum');
 
-  const [connState, setConnState] = useState<ConnState>('connecting');
+  const [started, setStarted] = useState(false);
+  const [connState, setConnState] = useState<ConnState>('idle');
   const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [micState, setMicState] = useState<MicState>('disabled');
   const [speaker, setSpeaker] = useState<SpeakerState>('idle');
@@ -216,15 +218,14 @@ export function Session() {
     }
   }, [id, startMic, startTimer]);
 
-  // --- mount: fetch session meta, create playback, connect. Cleanup on
-  // unmount and on tab close (beforeunload) — no leaked mic/WS (Reliability NFR).
+  // --- mount: fetch session meta only. Playback/mic/connect are deferred to
+  // handleStart() (the "Mulai Wawancara" user gesture) — this effect only
+  // sets up teardown on unmount and on tab close (beforeunload), so no
+  // leaked mic/WS whether or not the user ever starts (Reliability NFR).
   useEffect(() => {
     if (!id) return;
     tornRef.current = false;
     isMountedRef.current = true;
-
-    playbackRef.current = createAudioPlayback();
-    void connect();
 
     (async () => {
       try {
@@ -252,6 +253,20 @@ export function Session() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Everything that needs a user gesture runs INSIDE this click handler:
+  // resume() unlocks autoplay, startMic() triggers the mic permission
+  // prompt. Do not insert an `await` before either — that would break the
+  // gesture chain.
+  function handleStart() {
+    if (started) return;
+    const playback = createAudioPlayback();
+    playbackRef.current = playback;
+    void playback.resume();
+    setStarted(true);
+    startMic();
+    void connect();
+  }
 
   function toggleMic() {
     const capture = captureRef.current;
@@ -350,7 +365,7 @@ export function Session() {
   };
   const status = statusMap[speaker];
 
-  const showFullConnectingOverlay = !hasConnectedOnce && connState !== 'connected';
+  const showFullConnectingOverlay = started && !hasConnectedOnce && connState !== 'connected';
   const showReconnectOverlay =
     hasConnectedOnce && (connState === 'connecting' || connState === 'reconnecting' || connState === 'error');
 
@@ -390,7 +405,9 @@ export function Session() {
         onEnd={openEndConfirm}
       />
 
-      {showFullConnectingOverlay ? (
+      {!started ? (
+        <PreSessionCard fieldTitle={fieldTitle} context={context} onStart={handleStart} />
+      ) : showFullConnectingOverlay ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-[18px] px-5 py-16">
           <span className="h-[34px] w-[34px] animate-spin rounded-full border-[3px] border-[#e2e8f0] border-t-blue" />
           <div className="text-center">
