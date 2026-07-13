@@ -36,6 +36,7 @@ Konteks wawancara:
 ${context.join('\n')}
 
 Aturan wawancara:
+- Buka sesi dengan sapaan singkat (satu kalimat), lalu LANGSUNG ajukan pertanyaan pertama tanpa menunggu kandidat berbicara lebih dulu.
 - Ajukan selalu satu pertanyaan per giliran, lalu tunggu jawaban kandidat sebelum melanjutkan.
 - Setelah setiap jawaban kandidat, berikan umpan balik singkat (2-3 kalimat) sebelum melanjutkan ke pertanyaan berikutnya.
 - Tutup wawancara setelah 5-7 pertanyaan, lalu berikan ringkasan penutup yang singkat dan konstruktif.
@@ -68,7 +69,10 @@ export async function createEphemeralToken(
             responseModalities: [Modality.AUDIO],
             inputAudioTranscription: {},
             outputAudioTranscription: {},
-            speechConfig: { languageCode: 'id-ID' },
+            speechConfig: {
+              languageCode: 'id-ID',
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+            },
             sessionResumption: {},
             systemInstruction,
           },
