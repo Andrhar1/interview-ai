@@ -15,6 +15,12 @@ const PLAYBACK_SAMPLE_RATE = 24000;
 export interface AudioPlayback {
   enqueue(pcmBase64: string): void;
   clear(): void;
+  /**
+   * Membuat + me-resume AudioContext. HARUS dipanggil dari dalam handler user
+   * gesture (klik) agar autoplay policy browser tidak membisukan sesi — enqueue()
+   * pertama biasanya datang dari WebSocket, jauh dari gesture apa pun.
+   */
+  resume(): Promise<void>;
   readonly analyser: AnalyserNode;
   close(): Promise<void>;
 }
@@ -82,6 +88,13 @@ export function createAudioPlayback(): AudioPlayback {
     nextStartTime = ctx ? ctx.currentTime : 0;
   }
 
+  async function resume(): Promise<void> {
+    const { ctx: audioCtx } = ensureContext();
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+  }
+
   async function close(): Promise<void> {
     clear();
     if (ctx) {
@@ -95,6 +108,7 @@ export function createAudioPlayback(): AudioPlayback {
   return {
     enqueue,
     clear,
+    resume,
     // Accessing `analyser` lazily creates the (suspended, silent)
     // AudioContext if it doesn't exist yet — this does not itself start
     // playback and so doesn't run afoul of autoplay restrictions, but lets
