@@ -16,9 +16,10 @@ export interface AudioPlayback {
   enqueue(pcmBase64: string): void;
   clear(): void;
   /**
-   * Membuat + me-resume AudioContext. HARUS dipanggil dari dalam handler user
-   * gesture (klik) agar autoplay policy browser tidak membisukan sesi — enqueue()
-   * pertama biasanya datang dari WebSocket, jauh dari gesture apa pun.
+   * Creates and resumes the AudioContext. MUST be called from inside a user
+   * gesture handler (a click): the first enqueue() arrives from the WebSocket,
+   * far from any gesture, so autoplay policy would otherwise leave the session
+   * silent.
    */
   resume(): Promise<void>;
   readonly analyser: AnalyserNode;
