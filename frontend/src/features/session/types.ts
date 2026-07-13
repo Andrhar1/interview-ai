@@ -1,6 +1,6 @@
 /** Shared UI types for the live Session screen (Task 5). */
 
-export type SpeakerState = 'ai' | 'user' | 'idle';
+export type SpeakerState = 'ai' | 'user' | 'thinking' | 'idle';
 
 export type MicState = 'disabled' | 'unmuted' | 'muted' | 'denied';
 

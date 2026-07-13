@@ -7,18 +7,25 @@ interface TranscriptPanelProps {
   messages: TranscriptBubbleData[];
   /** 3-dot typing indicator while the AI's turn has started but no text has arrived yet. */
   typing: boolean;
+  /**
+   * 3-dot placeholder on the user's side while their speech is being
+   * captured but hasn't settled into a final bubble yet (Fase 3 liveness:
+   * server transcript deltas lag too far behind to render live, so we show
+   * "captured, text pending" instead of a real-time — but wrong — caption).
+   */
+  userTyping: boolean;
 }
 
 /** Persistent right-column transcript panel (handoff §4 "Klasik" variant). */
-export function TranscriptPanel({ messages, typing }: TranscriptPanelProps) {
+export function TranscriptPanel({ messages, typing, userTyping }: TranscriptPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, typing]);
+  }, [messages, typing, userTyping]);
 
-  const empty = messages.length === 0 && !typing;
+  const empty = messages.length === 0 && !typing && !userTyping;
 
   return (
     <div className="flex max-h-[640px] min-w-[300px] flex-1 flex-col overflow-hidden rounded-card border border-border bg-surface">
@@ -45,6 +52,22 @@ export function TranscriptPanel({ messages, typing }: TranscriptPanelProps) {
             />
             <span
               className="h-[7px] w-[7px] rounded-full bg-ink-muted"
+              style={{ animation: 'blink 1.2s infinite .4s' }}
+            />
+          </div>
+        )}
+        {userTyping && (
+          <div className="flex animate-fade-up items-center gap-[5px] self-end rounded-[14px_14px_4px_14px] bg-blue px-4 py-[13px]">
+            <span
+              className="h-[7px] w-[7px] rounded-full bg-white/70"
+              style={{ animation: 'blink 1.2s infinite 0s' }}
+            />
+            <span
+              className="h-[7px] w-[7px] rounded-full bg-white/70"
+              style={{ animation: 'blink 1.2s infinite .2s' }}
+            />
+            <span
+              className="h-[7px] w-[7px] rounded-full bg-white/70"
               style={{ animation: 'blink 1.2s infinite .4s' }}
             />
           </div>

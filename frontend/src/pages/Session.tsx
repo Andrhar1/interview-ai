@@ -4,6 +4,7 @@ import { apiRequest, ApiError } from '../lib/api';
 import { createLiveInterview, type ConnState, type LiveInterview } from '../lib/gemini/liveClient';
 import { createMicCapture, type MicCapture } from '../lib/audio/capture';
 import { createAudioPlayback, type AudioPlayback } from '../lib/audio/playback';
+import { useLocalSpeechDetection } from '../hooks/useLocalSpeechDetection';
 import type {
   AnalyzeResponse,
   Evaluation,
@@ -65,6 +66,13 @@ export function Session() {
   const [micState, setMicState] = useState<MicState>('disabled');
   const [speaker, setSpeaker] = useState<SpeakerState>('idle');
   const [transcript, setTranscript] = useState<TranscriptBubbleData[]>([]);
+  // Whether there's unflushed user speech for the CURRENT turn — drives the
+  // 3-dot placeholder bubble. The text itself lives in pendingUserTextRef
+  // (below), never in state: it must never be rendered as a running bubble
+  // (see appendOrOpen's comment for why — that's the lagging-caption promise
+  // this whole change removes). flushPendingUser() settles it into one final
+  // bubble once the turn is over.
+  const [userTyping, setUserTyping] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -81,6 +89,18 @@ export function Session() {
   const tornRef = useRef(false);
   const micStateRef = useRef<MicState>('disabled');
   const retryingRef = useRef(false);
+  // Accumulates onInputTranscript deltas for the user's current, unflushed
+  // turn. A ref (not state) because it's written from handlers created once
+  // inside connect() (closed over stale state otherwise) and because
+  // confirmEnd() needs a synchronous read of "whatever's pending right now"
+  // — see flushPendingUser() and confirmEnd() below.
+  const pendingUserTextRef = useRef('');
+  // Debounce timer: flush pendingUserTextRef after ~1.2s with no new
+  // inputTranscript delta (brief's rule (b) for "turn is over").
+  const debounceTimerRef = useRef<number | null>(null);
+  // Mirrors the local-speech-detection boolean (see below) for the same
+  // stale-closure reason as micStateRef.
+  const isUserSpeakingRef = useRef(false);
   // Bumped by every connect() call and by teardown(); lets an in-flight
   // createLiveInterview() detect it has been superseded (a newer connect(),
   // a manual retry, or an unmount/beforeunload) by the time it resolves —
@@ -93,6 +113,54 @@ export function Session() {
     micStateRef.current = micState;
   }, [micState]);
 
+  // Zero-lag "is the user speaking right now" signal, read straight off the
+  // mic AnalyserNode (see hooks/useLocalSpeechDetection.ts). UI ONLY — never
+  // used to gate sendAudio.
+  const isUserSpeaking = useLocalSpeechDetection(captureRef.current?.analyser ?? null);
+
+  useEffect(() => {
+    isUserSpeakingRef.current = isUserSpeaking;
+  }, [isUserSpeaking]);
+
+  // speaker state machine, driven by the local signal (instant), not by
+  // server transcript events (laggy — see the Fase 3 liveness brief):
+  // user starts speaking -> 'user' immediately, from ANY prior state
+  // (including barge-in while speaker === 'ai'). user goes quiet while we
+  // were in 'user' -> 'thinking' (waiting on the AI's reply, which the
+  // onAudioChunk/onOutputTranscript handlers below will flip to 'ai').
+  // Any other transition (idle<->thinking<->ai) is left to those handlers.
+  useEffect(() => {
+    if (isUserSpeaking) {
+      setSpeaker('user');
+    } else {
+      setSpeaker((prev) => (prev === 'user' ? 'thinking' : prev));
+    }
+  }, [isUserSpeaking]);
+
+  // Settle the pending user buffer into one final bubble. Called when the
+  // user's turn is over: either the AI's reply starts arriving (called from
+  // onAudioChunk/onOutputTranscript below), or ~1.2s pass with no new
+  // inputTranscript delta (the debounce timer below). Idempotent — a no-op
+  // if there's nothing pending.
+  const flushPendingUser = useCallback(() => {
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const text = pendingUserTextRef.current.trim();
+    pendingUserTextRef.current = '';
+    setUserTyping(false);
+    if (text.length === 0) return;
+    setTranscript((prev) => {
+      const last = prev[prev.length - 1];
+      // Defensive: settle any still-open bubble of a different role first
+      // (mirrors appendOrOpen's rule) — in the normal flow the last bubble
+      // is already final (the AI's previous turn), so this is a no-op.
+      const closed = last && !last.final ? [...prev.slice(0, -1), { ...last, final: true }] : prev;
+      return [...closed, { role: 'user', text, final: true }];
+    });
+  }, []);
+
   // --- teardown: stop capture, close live socket, close playback, clear timer.
   // Idempotent — safe to call from unmount, beforeunload, and the end flow.
   const teardown = useCallback(async () => {
@@ -102,6 +170,10 @@ export function Session() {
     if (timerIntervalRef.current !== null) {
       window.clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
+    }
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
     const closes: Promise<unknown>[] = [];
     // close() (not stop()) — stop() only suspends the 16kHz AudioContext, and
@@ -177,16 +249,29 @@ export function Session() {
         },
         onInputTranscript: (delta) => {
           if (myGen !== connectGenRef.current) return;
-          setSpeaker('user');
-          setTranscript((prev) => appendOrOpen(prev, 'user', delta));
+          // Never rendered live (see appendOrOpen's comment) — just buffered
+          // until the turn settles. Debounce rule (b): flush after ~1.2s of
+          // no new delta.
+          pendingUserTextRef.current += delta;
+          setUserTyping(true);
+          if (debounceTimerRef.current !== null) window.clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = window.setTimeout(() => {
+            debounceTimerRef.current = null;
+            flushPendingUser();
+          }, 1200);
         },
         onOutputTranscript: (delta) => {
           if (myGen !== connectGenRef.current) return;
+          // Debounce rule (a): the AI's reply starting is itself proof the
+          // user's turn is over — flush immediately rather than waiting out
+          // the 1.2s debounce.
+          flushPendingUser();
           setSpeaker('ai');
           setTranscript((prev) => appendOrOpen(prev, 'ai', delta));
         },
         onAudioChunk: (b64) => {
           if (myGen !== connectGenRef.current) return;
+          flushPendingUser(); // same rule (a) — the AI audio itself is the signal
           setSpeaker('ai');
           playbackRef.current?.enqueue(b64);
         },
@@ -201,7 +286,10 @@ export function Session() {
             }
             return prev;
           });
-          setSpeaker(micStateRef.current === 'unmuted' ? 'user' : 'idle');
+          // Read the LOCAL speech signal (instant), not micState: the user
+          // may already be mid-sentence again by the time the AI's turn
+          // completes.
+          setSpeaker(isUserSpeakingRef.current ? 'user' : 'idle');
         },
         onInterrupted: () => {
           if (myGen !== connectGenRef.current) return;
@@ -231,7 +319,7 @@ export function Session() {
       setConnState('error');
       setConnectError('Gagal terhubung ke pewawancara AI. Coba lagi.');
     }
-  }, [id, startMic, startTimer]);
+  }, [id, startMic, startTimer, flushPendingUser]);
 
   // --- mount: fetch session meta only. Playback/mic/connect are deferred to
   // handleStart() (the "Mulai Wawancara" user gesture) — this effect only
@@ -337,9 +425,23 @@ export function Session() {
       await teardown();
       if (!isMountedRef.current) return;
 
+      // Read pendingUserTextRef directly rather than calling
+      // flushPendingUser(): that settles into React state (setTranscript),
+      // which wouldn't be visible in the `transcript` read below within this
+      // same synchronous function (state updates are async). Reading the ref
+      // is synchronous and always current, so the user's last sentence — if
+      // they ended the session right after speaking, before either flush
+      // trigger fired — still reaches /analyze and /end, appended in order
+      // after the already-settled bubbles.
+      const trailingUserText = pendingUserTextRef.current.trim();
+      pendingUserTextRef.current = '';
+
       const exchanges: TranscriptExchange[] = transcript
         .filter((m) => m.text.trim().length > 0)
         .map((m) => ({ role: m.role, text: m.text }));
+      if (trailingUserText.length > 0) {
+        exchanges.push({ role: 'user', text: trailingUserText });
+      }
 
       if (exchanges.length === 0) {
         // Nothing to analyze — calling /analyze would 400 (min(1) exchanges)
@@ -390,7 +492,8 @@ export function Session() {
 
   const statusMap: Record<SpeakerState, { text: string; dot: string }> = {
     ai: { text: 'AI sedang berbicara', dot: '#2563eb' },
-    user: { text: 'Mendengarkan jawaban Anda', dot: '#dc2626' },
+    user: { text: 'Mendengarkan…', dot: '#dc2626' },
+    thinking: { text: 'AI sedang berpikir…', dot: '#f59e0b' },
     idle: { text: 'Menunggu jawaban Anda', dot: '#9aa1ad' },
   };
   const status = statusMap[speaker];
@@ -498,7 +601,7 @@ export function Session() {
               <div className="flex h-10 w-full items-center justify-center gap-[3px]">
                 <AudioVisualizer
                   analyser={captureRef.current?.analyser ?? null}
-                  active={micState === 'unmuted' && speaker === 'user'}
+                  active={micState === 'unmuted' && isUserSpeaking}
                   barCount={40}
                   color="#1e3a5f"
                   barWidthPx={3}
@@ -508,7 +611,7 @@ export function Session() {
           </div>
 
           {/* right column */}
-          <TranscriptPanel messages={transcript} typing={aiTyping} />
+          <TranscriptPanel messages={transcript} typing={aiTyping} userTyping={userTyping} />
         </div>
       )}
 
