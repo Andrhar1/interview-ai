@@ -1,7 +1,9 @@
 import type { ConnState } from '../../lib/gemini/liveClient';
 
 const CONFIG: Record<ConnState, { color: string; text: string }> = {
-  idle: { color: '#d97706', text: 'Menghubungkan…' },
+  // 'idle' is the pre-session screen: nothing is connecting yet, so saying
+  // "Menghubungkan…" there would be a lie.
+  idle: { color: '#9aa1ad', text: 'Belum dimulai' },
   connecting: { color: '#d97706', text: 'Menghubungkan…' },
   connected: { color: '#16a34a', text: 'Terhubung' },
   reconnecting: { color: '#dc2626', text: 'Koneksi terputus' },
