@@ -106,26 +106,25 @@ interface PendingUserTurn {
 const DEBOUNCE_MS = 1200; // no new inputTranscript delta for this long ⇒ settle the buffer
 const THINKING_TIMEOUT_MS = 10000; // give up on 'AI sedang berpikir…' and fall back to 'idle'
 // Measured: inputTranscription runs ~3s behind the speaker, but the drain
-// after they STOP talking can run up to ~8.4s. Raised well past the ~3s base
-// lag to also cover a barge-in landing near the worst end of that range: the
-// AI typically replies ~1.5s after the user stops, so if a new turn's rising
-// edge follows only a couple of seconds after that, the previous turn's last
-// words can still be in flight when the window used to close. When that
-// happens those words land in the NEW turn — which sits after the AI's
-// bubble — a genuine cross-speaker reorder, not merely an "approximate split
-// point" between two same-role bubbles. Raising this constant narrows that
-// window at the cost of the opposite mistake: a genuinely NEW, short
-// utterance arriving within ASR_LAG_MS of the previous rising edge gets
-// mis-attributed backward into the old turn instead of starting its own.
-// Given natural question/answer pacing (the AI's own question consumes
-// several seconds before the user starts a new answer), the reorder case is
-// judged both more likely and more damaging — it swaps who-said-what-when,
-// which is exactly the failure this whole turn-buffering design exists to
-// prevent — so this constant is biased toward the measured drain figure
-// rather than the base lag. It cannot be eliminated this way: Gemini gives
-// no per-delta "spoken at" timestamp, only an ARRIVAL time, so any fixed
-// window is a heuristic, not a guarantee.
-const ASR_LAG_MS = 6000;
+// after they STOP talking can run up to ~8.4s. There is no single correct
+// value here: to keep a turn's own trailing words from leaking forward past
+// the AI's bubble, this needs to be >= 8.4s; to keep a genuinely NEW
+// utterance (e.g. a barge-in) from being walked backward into the PREVIOUS
+// turn, it needs to be <= ~3s. Those two requirements are contradictory, so
+// no fixed threshold is correct — this is a heuristic, not a guarantee,
+// because Gemini gives no per-delta "spoken at" timestamp, only an ARRIVAL
+// time. Widening this toward the drain figure was tried and made things
+// worse: on barge-in, the interrupting utterance's own words arrive ~3s
+// after it was spoken, which then falls INSIDE the wider window, so
+// turnForDelta() walks back and appends the entire interruption onto the
+// PREVIOUS answer's bubble — which sits above the AI's reply. That's a
+// cross-speaker reorder AND a merge. Keeping this at the base ~3s lag bounds
+// the damage to a few trailing words of the previous answer drifting past
+// the AI's bubble on the rare slow-drain case — much smaller than a swapped
+// turn. The real fix is getting authoritative turn boundaries from the
+// server instead of inferring them from arrival time; that redesign is
+// tracked separately.
+const ASR_LAG_MS = 3000;
 // "Akhiri Sesi": no new delta for this long ⇒ ASR is done. Must be >= DEBOUNCE_MS:
 // mid-session we need 1.2s of ASR quiet to call a turn settled, so accepting less
 // at the highest-stakes moment would cut a still-draining sentence in half.
@@ -226,6 +225,14 @@ export function Session() {
   const isUserSpeakingRef = useRef(false);
   // 'AI sedang berpikir…' escape hatch (see the effect below).
   const thinkingTimerRef = useRef<number | null>(null);
+  // Timestamp of the last genuine AI activity (an audio chunk or output-
+  // transcript delta), used to re-arm the 'ai' escape hatch below. Read
+  // instead of the 'ai' state's mount time because onAudioChunk/onOutputTranscript
+  // call setSpeaker('ai') with the SAME value on every chunk while a long AI
+  // turn is speaking — React bails out of re-rendering on a no-op state
+  // update, so an effect keyed on `speaker` alone would never re-run and the
+  // timer would never be pushed out, wrongly timing out a still-speaking AI.
+  const lastAiActivityRef = useRef(0);
   // --- "Akhiri Sesi" ASR drain window (see drainInputTranscript / confirmEnd).
   const drainingRef = useRef(false);
   const drainIntervalRef = useRef<number | null>(null);
@@ -437,17 +444,42 @@ export function Session() {
   // timer is cancelled by this effect's own cleanup on every state change
   // and on unmount, and by teardown().
   useEffect(() => {
-    if (speaker !== 'thinking' && speaker !== 'ai') return;
-    const from = speaker;
-    const timer = window.setTimeout(() => {
-      thinkingTimerRef.current = null;
-      setSpeaker((prev) => (prev === from ? 'idle' : prev));
-    }, THINKING_TIMEOUT_MS);
-    thinkingTimerRef.current = timer;
-    return () => {
-      window.clearTimeout(timer);
-      thinkingTimerRef.current = null;
-    };
+    if (speaker === 'thinking') {
+      const timer = window.setTimeout(() => {
+        thinkingTimerRef.current = null;
+        setSpeaker((prev) => (prev === 'thinking' ? 'idle' : prev));
+      }, THINKING_TIMEOUT_MS);
+      thinkingTimerRef.current = timer;
+      return () => {
+        window.clearTimeout(timer);
+        thinkingTimerRef.current = null;
+      };
+    }
+    if (speaker === 'ai') {
+      // Re-arm against lastAiActivityRef rather than a fixed delay from when
+      // this effect (re)ran: onAudioChunk/onOutputTranscript call
+      // setSpeaker('ai') on every chunk of a long AI turn, which is a no-op
+      // state update once already 'ai' — React bails out and this effect
+      // does NOT re-run on that call. Polling the activity timestamp instead
+      // means the timeout only fires after THINKING_TIMEOUT_MS of genuine AI
+      // silence, not after a fixed time in the 'ai' state.
+      let timer: number;
+      const check = () => {
+        const remaining = THINKING_TIMEOUT_MS - (Date.now() - lastAiActivityRef.current);
+        if (remaining <= 0) {
+          thinkingTimerRef.current = null;
+          setSpeaker((prev) => (prev === 'ai' ? 'idle' : prev));
+          return;
+        }
+        timer = window.setTimeout(check, remaining);
+        thinkingTimerRef.current = timer;
+      };
+      check();
+      return () => {
+        window.clearTimeout(timer);
+        thinkingTimerRef.current = null;
+      };
+    }
   }, [speaker]);
 
   // --- teardown: stop capture, close live socket, close playback, clear every
@@ -667,6 +699,7 @@ export function Session() {
           // Not while the user is talking over us (barge-in): the local signal
           // is the truth about who is speaking, and this event may be a chunk
           // that was already in flight when they cut in.
+          lastAiActivityRef.current = Date.now();
           if (!isUserSpeakingRef.current) setSpeaker('ai');
           commitTranscript((prev) => appendOrOpen(prev, 'ai', delta));
         },
@@ -674,6 +707,7 @@ export function Session() {
           if (myGen !== connectGenRef.current) return;
           if (drainingRef.current) return; // ending: don't play / reopen bubbles
           flushPendingUser(); // same rule (a) — the AI audio itself is the signal
+          lastAiActivityRef.current = Date.now();
           if (!isUserSpeakingRef.current) setSpeaker('ai');
           playbackRef.current?.enqueue(b64);
         },
