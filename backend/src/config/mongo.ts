@@ -32,7 +32,10 @@ export async function connectMongo(): Promise<void> {
     throw new Error('MONGODB_URI is not set — cannot connect to MongoDB.');
   }
 
-  const newClient = new MongoClient(env.MONGODB_URI);
+  // Fail fast when MongoDB is unreachable (driver default is 30s of silence).
+  const newClient = new MongoClient(env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 4000,
+  });
   await newClient.connect();
   const newDb = newClient.db();
   await newDb.command({ ping: 1 });
