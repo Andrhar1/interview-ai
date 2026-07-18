@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { jobFieldsRouter } from './modules/jobFields/jobFields.routes.js';
 import { sessionsRouter } from './modules/sessions/sessions.routes.js';
+import { cvRouter } from './modules/cv/cv.routes.js';
 
 const app = express();
 
@@ -24,7 +25,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/job-fields', jobFieldsRouter);
 app.use('/api/sessions', sessionsRouter);
-// Further module routes (cv, ...) mounted in later phases.
+app.use('/api/cv', cvRouter);
 
 app.use(errorHandler);
 
@@ -34,7 +35,15 @@ connectMongo()
       console.log(`🚀 Backend listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
     });
   })
-  .catch((err) => {
-    console.error('❌ Failed to connect to MongoDB:', err);
+  .catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`❌ Gagal terhubung ke MongoDB: ${message}`);
+
+    const name = err instanceof Error ? err.name : '';
+    const looksUnreachable =
+      name === 'MongoServerSelectionError' || /ECONNREFUSED|Server selection timed out/i.test(message);
+    if (looksUnreachable) {
+      console.error('   Pastikan MongoDB jalan: docker start interviewai-mongo (atau lihat README).');
+    }
     process.exit(1);
   });

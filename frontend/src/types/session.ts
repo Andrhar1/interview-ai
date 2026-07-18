@@ -27,6 +27,14 @@ export interface CreateSessionResponse {
   session: SessionSummary;
 }
 
+/** POST /cv response. */
+export interface UploadCvResponse {
+  cv_id: string;
+  filename: string;
+  size_bytes: number;
+  extracted_text: string | null;
+}
+
 export interface EvaluationMetric {
   key: string;
   label: string;

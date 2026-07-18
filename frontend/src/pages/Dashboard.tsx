@@ -17,7 +17,12 @@ import { Card } from '../components/Card';
 import { IconTile } from '../components/IconTile';
 import { useAuth } from '../features/auth/AuthContext';
 import { apiRequest, ApiError } from '../lib/api';
-import type { CreateSessionResponse, JobField, JobFieldsResponse } from '../types/session';
+import type {
+  CreateSessionResponse,
+  JobField,
+  JobFieldsResponse,
+  UploadCvResponse,
+} from '../types/session';
 
 const FIELD_ICONS: Record<string, LucideIcon> = {
   'teknologi-informasi': Code,
@@ -48,8 +53,11 @@ export function Dashboard() {
   const [company, setCompany] = useState('');
   const [jobDesc, setJobDesc] = useState('');
 
-  // Step 2 — CV (UI only, no upload)
+  // Step 2 — CV upload
   const [cvName, setCvName] = useState<string | null>(null);
+  const [cvId, setCvId] = useState<string | null>(null);
+  const [cvUploading, setCvUploading] = useState(false);
+  const [cvError, setCvError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -80,9 +88,36 @@ export function Dashboard() {
     };
   }, []);
 
-  function pickFile(file: File | undefined | null) {
-    if (!file) return;
+  const CV_MAX_BYTES = 5 * 1024 * 1024;
+
+  async function pickFile(file: File | undefined | null) {
+    if (!file || cvUploading) return;
+    setCvError(null);
+
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext !== 'pdf' && ext !== 'docx') {
+      setCvError('Format CV harus PDF atau DOCX.');
+      return;
+    }
+    if (file.size > CV_MAX_BYTES) {
+      setCvError('Ukuran CV maksimal 5MB.');
+      return;
+    }
+
+    setCvUploading(true);
     setCvName(file.name);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await apiRequest<UploadCvResponse>('/cv', { method: 'POST', body: form });
+      setCvId(res.cv_id);
+    } catch (err) {
+      setCvName(null);
+      setCvError(err instanceof ApiError ? err.message : 'Gagal mengunggah CV. Coba lagi.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } finally {
+      setCvUploading(false);
+    }
   }
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
@@ -94,6 +129,8 @@ export function Dashboard() {
   function clearFile(e: React.MouseEvent) {
     e.stopPropagation();
     setCvName(null);
+    setCvId(null);
+    setCvError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -106,6 +143,7 @@ export function Dashboard() {
         method: 'POST',
         body: JSON.stringify({
           job_field_id: selectedFieldId,
+          cv_id: cvId ?? undefined,
           job_title: jobTitle.trim() || undefined,
           company: company.trim() || undefined,
           job_description: jobDesc.trim() || undefined,
@@ -246,7 +284,9 @@ export function Dashboard() {
               Unggah CV (opsional)
             </label>
             <div
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                if (!cvUploading) fileInputRef.current?.click();
+              }}
               onDragOver={(e) => {
                 e.preventDefault();
                 setDragOver(true);
@@ -266,15 +306,19 @@ export function Dashboard() {
               />
               {cvName ? (
                 <>
-                  <FileText size={22} color="#16a34a" strokeWidth={1.8} />
+                  <FileText size={22} color={cvUploading ? '#8a929e' : '#16a34a'} strokeWidth={1.8} />
                   <p className="mt-2 text-sm font-medium text-ink">{cvName}</p>
-                  <button
-                    type="button"
-                    onClick={clearFile}
-                    className="mt-1 cursor-pointer bg-transparent text-[13px] font-medium text-blue"
-                  >
-                    hapus
-                  </button>
+                  {cvUploading ? (
+                    <p className="mt-1 text-[13px] text-ink-muted">Mengunggah…</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      className="mt-1 cursor-pointer bg-transparent text-[13px] font-medium text-blue"
+                    >
+                      hapus
+                    </button>
+                  )}
                 </>
               ) : (
                 <>
@@ -287,6 +331,7 @@ export function Dashboard() {
                 </>
               )}
             </div>
+            {cvError && <p className="mt-1.5 text-[13px] text-danger">{cvError}</p>}
           </div>
         </Card>
 

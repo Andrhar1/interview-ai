@@ -53,6 +53,16 @@ export async function createSession(
     throw new AppError(400, 'Bidang pekerjaan tidak valid.');
   }
 
+  if (input.cv_id) {
+    const cv = await query('SELECT 1 FROM cv_documents WHERE id = $1 AND user_id = $2', [
+      input.cv_id,
+      userId,
+    ]);
+    if (!cv.rowCount) {
+      throw new AppError(400, 'CV tidak valid.');
+    }
+  }
+
   const { rows } = await query<SessionRow>(
     `INSERT INTO interview_sessions (user_id, job_field_id, cv_id, job_title, company, job_description)
      VALUES ($1, $2, $3, $4, $5, $6)
@@ -265,17 +275,20 @@ export interface SessionForToken {
   company: string | null;
   job_description: string | null;
   job_field_name: string;
+  cv_text: string | null;
 }
 
-/** Loads a session (joined with its job field) for minting a Gemini ephemeral token. */
+/** Loads a session (joined with its job field + CV text) for minting a Gemini ephemeral token. */
 export async function getSessionForToken(
   userId: string,
   sessionId: string,
 ): Promise<SessionForToken> {
   const { rows } = await query<SessionForToken>(
-    `SELECT s.id, s.status, s.job_title, s.company, s.job_description, f.name AS job_field_name
+    `SELECT s.id, s.status, s.job_title, s.company, s.job_description, f.name AS job_field_name,
+            c.extracted_text AS cv_text
      FROM interview_sessions s
      JOIN job_fields f ON f.id = s.job_field_id
+     LEFT JOIN cv_documents c ON c.id = s.cv_id
      WHERE s.id = $1 AND s.user_id = $2`,
     [sessionId, userId],
   );

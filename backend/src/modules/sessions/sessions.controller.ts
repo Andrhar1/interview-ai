@@ -51,6 +51,7 @@ export async function mintToken(req: Request, res: Response) {
     jobTitle: s.job_title,
     company: s.company,
     jobDescription: s.job_description,
+    cvContext: s.cv_text,
   });
   const { token, model } = await createEphemeralToken(systemInstruction);
   res.json({ token, model });

@@ -34,11 +34,14 @@ interface RawError {
 }
 
 async function rawRequest(path: string, options: RequestInit): Promise<Response> {
+  // For FormData bodies the browser must set Content-Type itself (it appends
+  // the multipart boundary) — forcing application/json would break uploads.
+  const isFormData = options.body instanceof FormData;
   return fetch(`/api${path}`, {
     ...options,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...options.headers,
     },

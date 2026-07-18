@@ -18,7 +18,15 @@ export interface BuildSystemInstructionInput {
   jobTitle?: string | null;
   company?: string | null;
   jobDescription?: string | null;
+  cvContext?: string | null;
 }
+
+/**
+ * Cap the CV text injected into the system instruction. A CV is 1-3 pages
+ * (~3-6k chars); anything beyond this is usually parsing noise, and an
+ * unbounded prompt inflates token cost + latency of every live session.
+ */
+const CV_CONTEXT_MAX_CHARS = 8000;
 
 /**
  * Builds the Bahasa Indonesia system instruction for the interview persona.
@@ -30,12 +38,15 @@ export function buildSystemInstruction(input: BuildSystemInstructionInput): stri
   if (input.company) context.push(`Perusahaan: ${input.company}`);
   if (input.jobDescription) context.push(`Deskripsi pekerjaan: ${input.jobDescription}`);
 
-  // TODO(Fase 4): inject {CV_CONTEXT} (the candidate's CV summary) into the
-  // "Konteks wawancara" block once the CV module exists.
+  const cv = input.cvContext?.trim();
+  const cvBlock = cv
+    ? `\n\nCV kandidat (gunakan untuk mempersonalisasi pertanyaan — gali pengalaman, keterampilan, dan pencapaian yang tercantum):\n${cv.slice(0, CV_CONTEXT_MAX_CHARS)}`
+    : '';
+
   return `Anda adalah pewawancara HR profesional Indonesia yang ramah namun formal, sedang melakukan simulasi wawancara kerja.
 
 Konteks wawancara:
-${context.join('\n')}
+${context.join('\n')}${cvBlock}
 
 Aturan wawancara:
 - Buka sesi dengan sapaan singkat (satu kalimat), lalu LANGSUNG ajukan pertanyaan pertama tanpa menunggu kandidat berbicara lebih dulu.

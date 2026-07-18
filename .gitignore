@@ -23,3 +23,6 @@ npm-debug.log*
 # Misc
 coverage/
 *.tsbuildinfo
+
+# CV uploads (Fase 4)
+backend/uploads/
