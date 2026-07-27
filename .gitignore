@@ -9,6 +9,7 @@ build/
 .env
 .env.local
 *.local
+deploy/.env
 
 # Logs
 logs/
@@ -26,3 +27,11 @@ coverage/
 
 # CV uploads (Fase 4)
 backend/uploads/
+
+# Pengujian Black Box (BAB IV)
+# Berkas WAV dibangkitkan ulang oleh tests/fixtures/build_audio.py — 30 MB,
+# tidak perlu masuk repositori.
+tests/fixtures/*.wav
+tests/results/
+test-results/
+playwright-report/

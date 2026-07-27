@@ -1,41 +1,18 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Check,
-  Code,
-  Megaphone,
-  BarChart3,
-  Users,
-  GraduationCap,
-  LayoutGrid,
-  Upload,
-  FileText,
-  type LucideIcon,
-} from 'lucide-react';
+import { Check, Upload, FileText } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Card } from '../components/Card';
 import { IconTile } from '../components/IconTile';
 import { useAuth } from '../features/auth/AuthContext';
 import { apiRequest, ApiError } from '../lib/api';
+import { iconFor } from '../lib/fieldIcons';
 import type {
   CreateSessionResponse,
   JobField,
   JobFieldsResponse,
   UploadCvResponse,
 } from '../types/session';
-
-const FIELD_ICONS: Record<string, LucideIcon> = {
-  'teknologi-informasi': Code,
-  pemasaran: Megaphone,
-  keuangan: BarChart3,
-  sdm: Users,
-  pendidikan: GraduationCap,
-  lainnya: LayoutGrid,
-};
-
-function iconFor(slug: string): LucideIcon {
-  return FIELD_ICONS[slug] ?? LayoutGrid;
-}
 
 export function Dashboard() {
   const { user } = useAuth();

@@ -1,0 +1,55 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 791 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 780 Td
+(ANDRI HARI MUSYAFFA) Tj T*
+(Backend Engineer - Jakarta, Indonesia) Tj T*
+(andrihari0704@gmail.com) Tj T*
+() Tj T*
+(RINGKASAN) Tj T*
+(Lulusan Teknik Informatika Universitas Bina Nusantara dengan tiga tahun) Tj T*
+(pengalaman membangun layanan web berskala menengah.) Tj T*
+() Tj T*
+(PENGALAMAN KERJA) Tj T*
+(Backend Engineer - PT Maju Teknologi \(2023 - sekarang\)) Tj T*
+(- Merancang layanan API yang melayani 50.000 permintaan per hari.) Tj T*
+(- Menurunkan waktu respons rata-rata sebesar 40 persen.) Tj T*
+(- Memimpin migrasi basis data dari MySQL ke PostgreSQL.) Tj T*
+() Tj T*
+(KEAHLIAN) Tj T*
+(Node.js, TypeScript, React, PostgreSQL, MongoDB, Docker) Tj T*
+() Tj T*
+(PENDIDIKAN) Tj T*
+(S1 Teknik Informatika, Universitas Bina Nusantara, IPK 3.60) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001083 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1153
+%%EOF

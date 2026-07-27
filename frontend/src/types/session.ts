@@ -35,6 +35,24 @@ export interface UploadCvResponse {
   extracted_text: string | null;
 }
 
+/** GET /sessions list item (Postgres row joined with job field + evaluation). */
+export interface SessionListItem {
+  id: string;
+  status: 'in_progress' | 'completed';
+  job_title: string | null;
+  company: string | null;
+  duration_seconds: number | null;
+  created_at: string;
+  ended_at: string | null;
+  job_field_name: string;
+  job_field_slug: string;
+  overall_score: number | null;
+}
+
+export interface SessionsListResponse {
+  sessions: SessionListItem[];
+}
+
 export interface EvaluationMetric {
   key: string;
   label: string;

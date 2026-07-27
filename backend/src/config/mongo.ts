@@ -58,6 +58,12 @@ export function transcripts(): Collection<TranscriptDoc> {
   return getDb().collection<TranscriptDoc>('transcripts');
 }
 
+/** Verifies that the established MongoDB connection is still responsive. */
+export async function pingMongo(): Promise<void> {
+  if (!db) throw new Error('MongoDB is not connected.');
+  await db.command({ ping: 1 });
+}
+
 /** Closes the shared MongoClient (graceful shutdown / tests). */
 export async function closeMongo(): Promise<void> {
   if (!client) return;
