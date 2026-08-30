@@ -2,6 +2,11 @@
 
 Aplikasi web simulasi wawancara kerja berbasis **suara real-time** dengan pewawancara AI, untuk pencari kerja Indonesia. UI dalam Bahasa Indonesia.
 
+## Informasi Pengumpulan Skripsi
+
+- **Nama:** Andri Hari Musyaffa
+- **NIM:** 2802607722
+
 Dokumen acuan: [`docs/PRD.md`](./docs/PRD.md) dan [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md).
 
 ## Tech Stack
