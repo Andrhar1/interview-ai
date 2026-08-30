@@ -70,7 +70,7 @@ Dibangun bertahap per fase (lihat `docs/IMPLEMENTATION_PLAN.md`). Fitur utama ap
 - ✅ **Fase 4** — Upload CV (validasi PDF/DOCX dan ukuran, ekstraksi teks, penyimpanan aman, serta injeksi konteks CV ke instruksi AI)
 - ✅ **Fase 5** — Result & History (hasil evaluasi, metrik penilaian, umpan balik AI, daftar riwayat, dan detail transkrip sesi)
 - ✅ **Fase 6** — Black Box Testing (skenario Playwright untuk alur autentikasi, konfigurasi sesi, wawancara live, upload CV, dan riwayat)
-- 🧩 **Fase 7** — Deployment Production (artefak Docker Compose, konfigurasi nginx, dan bootstrap environment tersedia; penerapan ke VPS/domain serta smoke test production perlu dijalankan)
+- ✅ **Fase 7** — Deployment Production (aplikasi sudah live di VPS dan dapat diakses melalui [andrihari.my.id](https://andrihari.my.id); artefak Docker Compose, konfigurasi nginx, dan bootstrap environment tersedia)
 
 ### Database (development)
 
