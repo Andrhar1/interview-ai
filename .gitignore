@@ -25,6 +25,11 @@ npm-debug.log*
 coverage/
 *.tsbuildinfo
 
+# Local documentation and thesis appendices
+/docs/
+/Lampiran-BAB-IV-Andri-Hari-Musyaffa/
+/Lampiran-BAB-IV-Andri-Hari-Musyaffa.zip
+
 # CV uploads (Fase 4)
 backend/uploads/
 
